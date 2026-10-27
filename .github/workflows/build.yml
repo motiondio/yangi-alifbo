@@ -1,0 +1,332 @@
+# Yangi Alifbo dasturini Windows (.exe) va macOS (.app) uchun yigʻadi.
+#
+#  - Har safar main ga push boʻlganda: yigʻib, artefakt sifatida saqlaydi.
+#  - "Run workflow" (workflow_dispatch) tugmasi bosilganda: yigʻib, GitHub Release yaratadi.
+name: Build Yangi Alifbo
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Versiya (Release uchun), masalan 1.0.0"
+        required: true
+        default: "1.0.0"
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    name: Testlar
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m unittest -v test_alifbo_core
+
+  build:
+    name: Yigʻish (${{ matrix.name }})
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows-x64
+          - os: macos-latest
+            name: macos-apple-silicon
+          - os: macos-15-intel
+            name: macos-intel
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Kutubxonalar
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller pynput pystray pillow
+
+      - name: Kutubxonalar (macOS)
+        if: runner.os == 'macOS'
+        run: pip install pyobjc-framework-Cocoa pyobjc-framework-Quartz pyobjc-framework-ApplicationServices pyobjc-framework-ServiceManagement
+
+      - name: Ikonka
+        run: python make_icon.py
+
+      # ---------------------------------------------------------------- Windows
+      - name: Yigʻish (Windows, bitta .exe)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          pyinstaller --noconfirm --clean --onefile --noconsole \
+            --name YangiAlifbo --icon icon.ico \
+            --add-data "config.json;." \
+            --hidden-import pystray._win32 \
+            --hidden-import pynput.keyboard._win32 --hidden-import pynput.mouse._win32 \
+            yangi_alifbo.py
+          mv dist/YangiAlifbo.exe "dist/YangiAlifbo-${{ matrix.name }}.exe"
+
+      - name: Yigʻish (Windows, portativ papka)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          pyinstaller --noconfirm --clean --onedir --noconsole --contents-directory lib \
+            --name YangiAlifbo --icon icon.ico \
+            --add-data "config.json;." \
+            --hidden-import pystray._win32 \
+            --hidden-import pynput.keyboard._win32 --hidden-import pynput.mouse._win32 \
+            --distpath dist-portable \
+            yangi_alifbo.py
+          cp README.md YangiAlifbo.ahk dist-portable/YangiAlifbo/
+
+      - name: Imzolash (Windows – ixtiyoriy kod imzolash sertifikati)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          PFX_B64: ${{ secrets.WINDOWS_CERT_PFX_B64 }}
+          PFX_PW: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: |
+          if (-not $env:PFX_B64) { Write-Host "::notice::WINDOWS_CERT_PFX_B64 secret yoʻq – imzosiz (SmartScreen ogohlantiradi). Qarang: README 'Keng tarqatish'"; exit 0 }
+          $pfx = Join-Path $env:RUNNER_TEMP "cert.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:PFX_B64))
+          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe" | Sort-Object FullName | Select-Object -Last 1
+          foreach ($f in @("dist\YangiAlifbo-${{ matrix.name }}.exe", "dist-portable\YangiAlifbo\YangiAlifbo.exe")) {
+            & $signtool.FullName sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f $pfx /p $env:PFX_PW $f
+            if ($LASTEXITCODE -ne 0) { throw "signtool xato: $f" }
+          }
+          Remove-Item $pfx
+          echo "WIN_SIGNED=1" >> $env:GITHUB_ENV
+
+      - name: Portativ zip (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: cd dist-portable && 7z a -tzip "../dist/YangiAlifbo-${{ matrix.name }}-portable.zip" YangiAlifbo
+
+      - name: Oʻrnatuvchi (Windows, Inno Setup)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          PFX_B64: ${{ secrets.WINDOWS_CERT_PFX_B64 }}
+          PFX_PW: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (!(Test-Path $iscc)) { choco install innosetup --no-progress -y | Out-Null }
+          $ver = "${{ inputs.version }}"; if (-not $ver) { $ver = "0.0.0" }
+          & $iscc "/DAppVersion=$ver" "/DSourceDir=$PWD\dist-portable\YangiAlifbo" "installer\YangiAlifbo.iss"
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup xato" }
+          Move-Item "dist\YangiAlifbo-Setup-$ver.exe" "dist\YangiAlifbo-Setup-${{ matrix.name }}.exe" -Force
+          if ($env:WIN_SIGNED -eq "1") {
+            $pfx = Join-Path $env:RUNNER_TEMP "cert.pfx"
+            [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:PFX_B64))
+            $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe" | Sort-Object FullName | Select-Object -Last 1
+            & $signtool.FullName sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f $pfx /p $env:PFX_PW "dist\YangiAlifbo-Setup-${{ matrix.name }}.exe"
+            Remove-Item $pfx
+          }
+          Get-ChildItem dist
+
+      - name: Sinov (Windows – yigʻilgan fayl ishga tushadimi)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          # --help argparse orqali chiqadi: pynput va alifbo_core yuklangani tekshiriladi.
+          # Yigʻilgan .exe xatoda modal oyna chiqarib osilib qoladi – shuning uchun timeout.
+          timeout 120 "./dist/YangiAlifbo-${{ matrix.name }}.exe" --help
+          timeout 120 "./dist/YangiAlifbo-${{ matrix.name }}.exe" --check > check.log; cat check.log; grep -q "TEKSHIRUV: OK" check.log
+          timeout 120 ./dist-portable/YangiAlifbo/YangiAlifbo.exe --check > check2.log; cat check2.log; grep -q "TEKSHIRUV: OK" check2.log
+          echo "OK: yigʻilgan .exe ishga tushdi va barcha modullar yuklandi"
+
+      # ------------------------------------------------------------------ macOS
+      - name: Yigʻish (macOS .app)
+        if: runner.os == 'macOS'
+        run: |
+          pyinstaller --noconfirm --clean --onedir --windowed \
+            --name "Yangi Alifbo" --icon icon.icns \
+            --osx-bundle-identifier uz.yangialifbo.app \
+            --add-data "config.json:." \
+            --hidden-import pystray._darwin \
+            --hidden-import pynput.keyboard._darwin --hidden-import pynput.mouse._darwin \
+            yangi_alifbo.py
+          APP="dist/Yangi Alifbo.app"
+          # Dock'da koʻrinmasin – faqat menyu satrida (tray) ishlaydi
+          /usr/libexec/PlistBuddy -c "Add :LSUIElement bool true" "$APP/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Add :NSHumanReadableCopyright string 'Yangi oʻzbek lotin alifbosi uchun avtomatik harf toʻgʻirlagich'" "$APP/Contents/Info.plist"
+
+      - name: Imzolash (macOS – secret'dagi sertifikat (Developer ID yoki self-signed), boʻlmasa ad-hoc)
+        if: runner.os == 'macOS'
+        env:
+          P12_B64: ${{ secrets.MACOS_SIGNING_P12_B64 }}
+          P12_PW: ${{ secrets.MACOS_SIGNING_P12_PASSWORD }}
+        run: |
+          APP="dist/Yangi Alifbo.app"
+          IDENTITY=""
+          if [ -n "$P12_B64" ]; then
+            KEYCHAIN="$RUNNER_TEMP/yangi-alifbo.keychain-db"
+            KC_PW="$(openssl rand -hex 16)"
+            P12="$RUNNER_TEMP/codesign.p12"
+            printf '%s' "$P12_B64" | base64 --decode > "$P12"
+            security create-keychain -p "$KC_PW" "$KEYCHAIN"
+            security set-keychain-settings -lut 21600 "$KEYCHAIN"
+            security unlock-keychain -p "$KC_PW" "$KEYCHAIN"
+            security import "$P12" -k "$KEYCHAIN" -P "${P12_PW:-yangialifbo}" -f pkcs12 -T /usr/bin/codesign -T /usr/bin/security
+            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KC_PW" "$KEYCHAIN" >/dev/null
+            security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+            # Apple Developer ID zanjiri (p12 ichida boʻlmasa)
+            curl -fsSL -o "$RUNNER_TEMP/DeveloperIDG2CA.cer" https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer \
+              && security import "$RUNNER_TEMP/DeveloperIDG2CA.cer" -k "$KEYCHAIN" -T /usr/bin/codesign >/dev/null 2>&1 || true
+            # self-signed sertifikatga ishonch (Developer ID uchun zarar qilmaydi)
+            openssl pkcs12 -in "$P12" -passin "pass:${P12_PW:-yangialifbo}" -nokeys -legacy 2>/dev/null > "$RUNNER_TEMP/cert.pem" \
+              || openssl pkcs12 -in "$P12" -passin "pass:${P12_PW:-yangialifbo}" -nokeys > "$RUNNER_TEMP/cert.pem"
+            sudo security add-trusted-cert -d -r trustRoot -p codeSign -k /Library/Keychains/System.keychain "$RUNNER_TEMP/cert.pem" || true
+            security find-identity -v -p codesigning "$KEYCHAIN" || true
+            IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN" | grep -E 'Developer ID Application|Yangi Alifbo Signing' | head -1 | awk '{print $2}')"
+            rm -f "$P12"
+          else
+            echo "::notice::MACOS_SIGNING_P12_B64 secret yoʻq – ad-hoc imzo (Gatekeeper 'Open Anyway' soʻraydi). Qarang: README 'Keng tarqatish'"
+          fi
+          if [ -n "$IDENTITY" ] && codesign --force --deep --options runtime --timestamp --entitlements entitlements.plist --sign "$IDENTITY" "$APP"; then
+            echo "Imzolandi: sertifikat $IDENTITY"
+            echo "MAC_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+          else
+            [ -n "$P12_B64" ] && echo "::warning::Sertifikat bilan imzolab boʻlmadi – ad-hoc imzo ishlatiladi"
+            codesign --force --deep --sign - "$APP"
+            echo "Imzolandi: ad-hoc"
+          fi
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          echo "--- designated requirement:"
+          codesign -d -r- "$APP" 2>&1 | tee dr.txt
+          if [ -n "$IDENTITY" ]; then grep -q 'certificate leaf\|anchor apple' dr.txt; fi
+
+      - name: Notarizatsiya (macOS – Apple Developer akkaunti secret'lari boʻlsa)
+        if: runner.os == 'macOS'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          APP="dist/Yangi Alifbo.app"
+          if [ -z "$MAC_IDENTITY" ] || [ -z "$APPLE_ID" ] || [ -z "$APPLE_APP_PASSWORD" ] || [ -z "$APPLE_TEAM_ID" ]; then
+            echo "::notice::Notarizatsiya oʻtkazilmadi (Developer ID sertifikati + APPLE_ID/APPLE_APP_PASSWORD/APPLE_TEAM_ID kerak)"
+            exit 0
+          fi
+          if ! codesign -dvv "$APP" 2>&1 | grep -q "Developer ID Application"; then
+            echo "::notice::Imzo Developer ID emas – notarizatsiya mumkin emas"; exit 0
+          fi
+          ditto -c -k --keepParent "$APP" "$RUNNER_TEMP/notarize.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" --apple-id "$APPLE_ID" --password "$APPLE_APP_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+          xcrun stapler staple "$APP"
+          spctl --assess --type execute -vv "$APP"
+          echo "MAC_NOTARIZED=1" >> "$GITHUB_ENV"
+
+      - name: Zip (macOS)
+        if: runner.os == 'macOS'
+        run: cd dist && ditto -c -k --keepParent "Yangi Alifbo.app" "YangiAlifbo-${{ matrix.name }}.zip" && ls -la
+
+      - name: Sinov (macOS – yigʻilgan .app ishga tushadimi)
+        if: runner.os == 'macOS'
+        run: |
+          APP_EXE="dist/Yangi Alifbo.app/Contents/MacOS/Yangi Alifbo"
+          "$APP_EXE" --help
+          "$APP_EXE" --check | tee check.log
+          grep -q "TEKSHIRUV: OK" check.log
+          plutil -p "dist/Yangi Alifbo.app/Contents/Info.plist" | grep -E "LSUIElement|CFBundleIdentifier|CFBundleIconFile"
+          echo "OK: yigʻilgan .app ishga tushdi va barcha modullar yuklandi"
+
+      - name: DMG (macOS – Applications ga sudrab oʻrnatish uchun)
+        if: runner.os == 'macOS'
+        continue-on-error: true
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          DMG="dist/YangiAlifbo-${{ matrix.name }}.dmg"
+          rm -rf dmg-root && mkdir dmg-root
+          ditto "dist/Yangi Alifbo.app" "dmg-root/Yangi Alifbo.app"
+          ln -s /Applications dmg-root/Applications
+          for i in 1 2 3; do
+            hdiutil create -volname "Yangi Alifbo" -srcfolder dmg-root -ov -format UDZO "$DMG" && break || sleep 5
+          done
+          if [ -n "$MAC_IDENTITY" ]; then codesign --force --timestamp --sign "$MAC_IDENTITY" "$DMG"; fi
+          if [ "$MAC_NOTARIZED" = "1" ]; then
+            xcrun notarytool submit "$DMG" --apple-id "$APPLE_ID" --password "$APPLE_APP_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+            xcrun stapler staple "$DMG"
+          fi
+          ls -la dist
+
+      - name: Artefakt
+        uses: actions/upload-artifact@v4
+        with:
+          name: YangiAlifbo-${{ matrix.name }}
+          path: |
+            dist/YangiAlifbo-${{ matrix.name }}.exe
+            dist/YangiAlifbo-Setup-${{ matrix.name }}.exe
+            dist/YangiAlifbo-${{ matrix.name }}-portable.zip
+            dist/YangiAlifbo-${{ matrix.name }}.zip
+            dist/YangiAlifbo-${{ matrix.name }}.dmg
+          if-no-files-found: error
+
+  release:
+    name: Release
+    if: github.event_name == 'workflow_dispatch'
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Fayllar
+        run: |
+          cp YangiAlifbo.ahk install-mac.sh artifacts/
+          ls -la artifacts
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: yangi-alifbo-v${{ inputs.version }}
+          name: Yangi Alifbo v${{ inputs.version }}
+          files: artifacts/*
+          body: |
+            ## Yangi Alifbo v${{ inputs.version }}
+
+            Yangi oʻzbek lotin alifbosi (ö ğ ş ç) uchun avtomatik harf toʻgʻirlagich.
+
+            | Fayl | Kimga |
+            |------|-------|
+            | `YangiAlifbo-Setup-windows-x64.exe` | **Windows 10/11 – oʻrnatuvchi** (Start menyu, avtomatik ishga tushish, oʻchirish) |
+            | `YangiAlifbo-windows-x64.exe` | Windows – bitta fayl, oʻrnatishsiz |
+            | `YangiAlifbo-windows-x64-portable.zip` | Windows – papka varianti (Defender .exe ga shubha qilsa) |
+            | `YangiAlifbo-macos-apple-silicon.dmg` / `.zip` | Mac (M1/M2/M3/M4) |
+            | `YangiAlifbo-macos-intel.dmg` / `.zip` | Mac (Intel) |
+            | `YangiAlifbo.ahk` | Windows – AutoHotkey v2 varianti |
+            | `install-mac.sh` | Mac – Terminal orqali oʻrnatish: `sh ~/Downloads/install-mac.sh` (Gatekeeper'ni chetlab oʻtadi) |
+
+            **Windows:** `YangiAlifbo-Setup-windows-x64.exe` ni ishga tushiring. SmartScreen ogohlantirsa: *More info → Run anyway*.
+            Soat yonida yashil "ö" belgisi paydo boʻladi.
+
+            **macOS (3 qadam):**
+            1. `.dmg` ni oching va `Yangi Alifbo` ni **Applications** papkasiga sudrab tashlang
+               (yoki `.zip` ni ochib ilovani ikki marta bosing – u oʻzi Applications ga oʻrnatishni taklif qiladi).
+            2. Applications dan oching. macOS toʻsadi: "Apple could not verify…" (ruscha: «Не удаётся открыть программу») –
+               *System Settings → Privacy & Security* → pastdagi **Open Anyway** («Всё равно открыть»), keyin yana oching (bir marta).
+               M1–M4 uchun `apple-silicon`, Intel uchun `intel` faylini oling.
+            3. Ilova ikkita ruxsat soʻraydi – *System Settings → Privacy & Security* → **Accessibility** va
+               **Input Monitoring** roʻyxatlarida "Yangi Alifbo" ni yoqing. Ruxsat berilgach dastur oʻzi davom etadi;
+               davom etmasa, menyu satridagi belgidan *Chiqish* qilib qayta oching.
+               Ruxsat qayta-qayta soʻralaversa – ilova oynasidagi **Eski yozuvlarni tozalash** tugmasini bosing
+               (yoki roʻyxatda "Yangi Alifbo" ni − bilan oʻchirib qayta qoʻshing): bu eski versiyadan qolgan yozuv.
+
+            Belgi **menyu satrida** (yuqori oʻngda) chiqadi, Dock'da koʻrinmaydi. Chiqish: belgi → *Chiqish*.
+            Yoqish/oʻchirish: **Ctrl+Alt+U** (Mac: Control+Option+U).
+            Yangi versiyaga oʻtganda ruxsatni bir marta qayta berish kerak boʻladi (ilova eski yozuvni oʻzi tozalaydi).
+            Bunday boʻlmasligi uchun doimiy imzo sozlash: `signing/README.md`.
+
+            Toʻliq qoʻllanma: https://github.com/motiondio/yangi-alifbo#readme

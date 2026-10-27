@@ -1,0 +1,8 @@
+{
+  "hotkey": "<ctrl>+<alt>+u",
+  "enabled_on_start": true,
+  "backspace_undo": true,
+  "strip_sh_apostrophe": true,
+  "tutuq_belgisi": null,
+  "tray": true
+}

@@ -1,0 +1,11 @@
+__pycache__/
+build/
+dist/
+dist-portable/
+*.spec
+icon.png
+icon.ico
+icon.icns
+signing/*.p12
+signing/*.pem
+signing/*.b64

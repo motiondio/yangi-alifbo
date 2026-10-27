@@ -1,0 +1,4 @@
+pynput>=1.8
+# ixtiyoriy – tray belgisi uchun:
+pystray>=0.19
+pillow>=9
