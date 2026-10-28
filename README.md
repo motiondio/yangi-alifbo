@@ -100,6 +100,8 @@ Papkada uch xil variant bor:
 pip install pynput
 # ixtiyoriy: tray (soat yonida) belgisi uchun
 pip install pystray pillow
+# Windows: brauzer manzil satri (Edge/Chrome) uchun – pastdagi "Qanday ishlaydi" ga qarang
+pip install comtypes
 ```
 
 ### Ishga tushirish
@@ -162,6 +164,7 @@ Qoʻlda (oʻz kompyuteringizda, faqat oʻz tizimingiz uchun):
 
 ```bash
 pip install pyinstaller pynput pystray pillow
+pip install comtypes                     # faqat Windows
 python make_icon.py                      # icon.ico / icon.icns yaratadi
 
 # Windows  → dist\YangiAlifbo.exe
@@ -284,6 +287,12 @@ yoki QR-kodga qoʻyish mumkin. Yangi versiya chiqarish: *Actions → Build Yangi
 (Backspace + yangi harf). Sichqoncha bosilganda, strelka/Enter/Tab bosilganda,
 Ctrl/Alt/Cmd kombinatsiyalarida kontekst tozalanadi, shuning uchun eski matn buzilmaydi.
 
+Brauzer manzil satri (Edge, Chrome, Safari) va Win+R oynasi terilgan matnga taklifni
+belgilangan holda qoʻshadi: `Sh[opify.com]`. Bunda birinchi Backspace faqat taklifni oʻchiradi —
+shuning uchun dastur almashtirishdan oldin fokusdagi maydonda matn oxirigacha belgilangan qism
+bor-yoʻqligini tekshiradi (macOS: Accessibility API, Windows: UI Automation) va bor boʻlsa,
+bitta qoʻshimcha Backspace yuboradi. Aks holda `Shahzod` → `Sşahzod` boʻlib qolardi.
+
 Testlar: `python -m unittest -v test_alifbo_core` (25 ta test).
 
 ## Cheklovlar
@@ -292,4 +301,6 @@ Testlar: `python -m unittest -v test_alifbo_core` (25 ta test).
   Boshqa tilda yozganda oʻchirib qoʻying.
 * Oʻyinlar va baʼzi eski dasturlar Unicode klaviatura kiritishini qabul qilmasligi mumkin.
 * macOS Wayland yoʻq, Linux da esa faqat X11 da ishlaydi.
+* AutoHotkey varianti brauzer manzil satridagi taklifni sezmaydi (`Shahzod` → `Sşahzod`) —
+  u yerda Python/.exe variantini ishlating.
 * Parol maydonlarida ham ishlaydi — paroli `sh` boʻlganlar ehtiyot boʻlsin (Ctrl+Alt+U).

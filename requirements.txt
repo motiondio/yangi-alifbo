@@ -2,3 +2,5 @@ pynput>=1.8
 # ixtiyoriy – tray belgisi uchun:
 pystray>=0.19
 pillow>=9
+# Windows: brauzer manzil satri (Edge/Chrome) taklif qoʻshganda toʻgʻri almashtirish uchun:
+comtypes>=1.2; sys_platform == "win32"

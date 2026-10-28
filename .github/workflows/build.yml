@@ -59,6 +59,14 @@ jobs:
         if: runner.os == 'macOS'
         run: pip install pyobjc-framework-Cocoa pyobjc-framework-Quartz pyobjc-framework-ApplicationServices pyobjc-framework-ServiceManagement
 
+      # Brauzer manzil satridagi belgilangan taklifni aniqlash uchun (UI Automation).
+      # UIAutomationClient moduli oldindan yaratiladi – yigʻilgan .exe uni ishga tushganda yaratmasin.
+      - name: Kutubxonalar (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          pip install comtypes
+          python -c "import comtypes.client; comtypes.client.GetModule('UIAutomationCore.dll')"
+
       - name: Ikonka
         run: python make_icon.py
 
@@ -72,6 +80,7 @@ jobs:
             --add-data "config.json;." \
             --hidden-import pystray._win32 \
             --hidden-import pynput.keyboard._win32 --hidden-import pynput.mouse._win32 \
+            --hidden-import comtypes.gen.UIAutomationClient \
             yangi_alifbo.py
           mv dist/YangiAlifbo.exe "dist/YangiAlifbo-${{ matrix.name }}.exe"
 
@@ -84,6 +93,7 @@ jobs:
             --add-data "config.json;." \
             --hidden-import pystray._win32 \
             --hidden-import pynput.keyboard._win32 --hidden-import pynput.mouse._win32 \
+            --hidden-import comtypes.gen.UIAutomationClient \
             --distpath dist-portable \
             yangi_alifbo.py
           cp README.md YangiAlifbo.ahk dist-portable/YangiAlifbo/

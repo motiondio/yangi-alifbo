@@ -414,6 +414,88 @@ else:
         return False
 
 
+# ------------------------------------------------------ belgilangan taklif
+# Brauzer manzil satri (Edge, Chrome, Safari), Win+R oynasi va shunga oʻxshash maydonlar
+# terilgan matnga taklifni belgilangan holda qoʻshib qoʻyadi: "Sh[opify.com]".  Bunday
+# paytda birinchi Backspace faqat belgilangan qismni oʻchiradi va "Shahzod" → "Sşahzod"
+# boʻlib qoladi.  Shuning uchun almashtirishdan oldin fokusdagi maydonda matn OXIRIGACHA
+# belgilangan qism bor-yoʻqligini tekshiramiz (terminalda sichqoncha bilan belgilangan matn
+# kabi boshqa belgilashlar hisobga olinmaydi).  Tekshirib boʻlmasa – False (eski xatti-harakat).
+if IS_MAC:
+    def autocomplete_selected() -> bool:
+        try:
+            import HIServices as AX
+            system = AX.AXUIElementCreateSystemWide()
+            AX.AXUIElementSetMessagingTimeout(system, 0.25)  # osilgan dastur bizni ham toʻxtatmasin
+            err, el = AX.AXUIElementCopyAttributeValue(system, AX.kAXFocusedUIElementAttribute, None)
+            if err or el is None:
+                return False
+            err, rng = AX.AXUIElementCopyAttributeValue(el, AX.kAXSelectedTextRangeAttribute, None)
+            if err or rng is None:
+                return False
+            ok, (start, length) = AX.AXValueGetValue(rng, AX.kAXValueCFRangeType, None)
+            if not ok or length <= 0:
+                return False
+            err, total = AX.AXUIElementCopyAttributeValue(el, AX.kAXNumberOfCharactersAttribute, None)
+            if err or total is None:
+                err, value = AX.AXUIElementCopyAttributeValue(el, AX.kAXValueAttribute, None)
+                if err or not isinstance(value, str):
+                    return False
+                total = len(value.encode("utf-16-le")) // 2  # CFRange UTF-16 birliklarida
+            return start + length == int(total)
+        except Exception:
+            return False
+
+elif IS_WIN:
+    _uia_local = threading.local()
+
+    def _uia():
+        """UI Automation mijozi (har bir oqim uchun alohida – COM obyektlari oqimga bogʻliq)."""
+        client = getattr(_uia_local, "client", None)
+        if client is None:
+            import comtypes
+            import comtypes.client
+            try:
+                comtypes.CoInitializeEx(comtypes.COINIT_MULTITHREADED)
+            except OSError:
+                pass  # oqim COM bilan allaqachon ishga tushirilgan
+            try:
+                from comtypes.gen import UIAutomationClient as mod  # CI oldindan yaratadi
+            except ImportError:
+                mod = comtypes.client.GetModule("UIAutomationCore.dll")
+            uia = comtypes.client.CreateObject(mod.CUIAutomation, interface=mod.IUIAutomation)
+            try:
+                uia2 = uia.QueryInterface(mod.IUIAutomation2)
+                uia2.ConnectionTimeout = 250  # ms – osilgan dastur bizni ham toʻxtatmasin
+                uia2.TransactionTimeout = 250
+            except Exception:
+                pass
+            client = _uia_local.client = (mod, uia)
+        return client
+
+    def autocomplete_selected() -> bool:
+        try:
+            mod, uia = _uia()
+            pattern = uia.GetFocusedElement().GetCurrentPattern(10014)  # UIA_TextPatternId
+            if not pattern:
+                return False
+            text = pattern.QueryInterface(mod.IUIAutomationTextPattern)
+            sel = text.GetSelection()
+            if not sel or sel.Length < 1:
+                return False
+            rng = sel.GetElement(0)
+            if not rng.GetText(1):
+                return False  # faqat kursor, belgilangan matn yoʻq
+            # 1 = TextPatternRangeEndpoint_End: belgilash matn oxirigacha boradimi
+            return rng.CompareEndpoints(1, text.DocumentRange, 1) == 0
+        except Exception:
+            return False
+
+else:
+    def autocomplete_selected() -> bool:
+        return False
+
+
 # -------------------------------------------------------------------- app
 class App:
     def __init__(self, cfg: dict) -> None:
@@ -428,6 +510,8 @@ class App:
         self.q: "queue.Queue[tuple]" = queue.Queue()
         self._injecting = threading.Event()
         self._mods: set = set()
+        # Yozgan harfimizdan keyin maydon taklif qoʻshdi – keyingi Backspace faqat uni oʻchiradi
+        self._suggestion = False
         self._stop = threading.Event()
         self.tray = None
         self._kb_listener = None
@@ -492,8 +576,12 @@ class App:
             self.engine.reset()
             return
 
+        suggestion, self._suggestion = self._suggestion, False
         action = None
         if key == Key.backspace:
+            if suggestion:
+                # Bu Backspace harfimizni emas, brauzer taklifini oʻchirdi – undo keyingisiga qoladi
+                return
             action = self.engine.feed_backspace()
         elif key == Key.space:
             self.engine.feed_char(" ")
@@ -514,11 +602,15 @@ class App:
         self._injecting.set()
         try:
             time.sleep(0.004)  # asl tugma dasturga yetib borsin
-            for _ in range(action.delete):
+            delete = action.delete
+            if delete and autocomplete_selected():
+                delete += 1    # birinchi Backspace belgilangan taklifni oʻchiradi
+            for _ in range(delete):
                 self.controller.tap(Key.backspace)
             if action.insert:
                 self.controller.type(action.insert)
             time.sleep(0.03)   # listener bizning tugmalarni koʻrib boʻlsin
+            self._suggestion = bool(action.undo) and autocomplete_selected()
         finally:
             self._injecting.clear()
 
@@ -648,7 +740,10 @@ def run_check() -> int:
             import Quartz
             assert callable(HIServices.AXIsProcessTrusted)
             assert callable(Quartz.CGPreflightListenEventAccess)
-            print("macOS ruxsat API (HIServices/Quartz): OK")
+            assert callable(HIServices.AXUIElementCreateSystemWide)
+            assert callable(HIServices.AXValueGetValue)
+            assert HIServices.kAXValueCFRangeType is not None
+            print("macOS ruxsat va Accessibility API (HIServices/Quartz): OK")
         except Exception as exc:
             problems.append(f"macOS API: {exc!r}")
         try:
@@ -656,6 +751,12 @@ def run_check() -> int:
             print("macOS Login Items API (ServiceManagement): OK")
         except Exception as exc:
             problems.append(f"macOS ServiceManagement: {exc!r}")
+    if IS_WIN:
+        try:
+            _uia()
+            print("Windows UI Automation (comtypes): OK")
+        except Exception as exc:
+            problems.append(f"Windows UI Automation: {exc!r}")
     eng = Engine()
     eng.feed_char("s")
     act = eng.feed_char("h")
