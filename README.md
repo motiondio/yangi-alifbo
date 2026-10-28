@@ -36,6 +36,8 @@ Tayyor fayllar **[Releases](https://github.com/motiondio/yangi-alifbo/releases/l
 
 **Windows:** `YangiAlifbo-Setup-windows-x64.exe` ni ishga tushiring. SmartScreen "Windows protected your PC" desa —
 *More info → Run anyway* (dastur imzolanmagan, chunki imzo sertifikati pullik).
+Antivirus (Windows Defender) faylni "virus" deb karantinga olsa — bu notoʻgʻri signal, qarang:
+[Antivirus "virus" desa](#antivirus-virus-desa).
 Soat yonida yashil **ö** belgisi chiqadi: chap tugma — yoqish/oʻchirish, oʻng tugma — menyu.
 Avtomatik ishga tushishi uchun: `Win+R` → `shell:startup` → shu papkaga `.exe` yorligʻini qoʻying.
 
@@ -265,6 +267,36 @@ Kod imzolash sertifikati kerak: OV sertifikat (~$200–400/yil, masalan Sectigo/
 
 CI `.exe`, portativ nusxa va oʻrnatuvchini `signtool` bilan imzolaydi. Imzosiz tarqatish ham mumkin:
 SmartScreen ogohlantirishi vaqt oʻtib, yuklab olishlar koʻpaygach, oʻzi yoʻqoladi (reputatsiya).
+
+### Antivirus "virus" desa
+
+Bu notoʻgʻri signal (false positive). Dastur barcha tugmalarni kuzatadi va oʻzi tugma yuboradi —
+keylogger'lar ham shunday ishlaydi. Ustiga-ustak u imzolanmagan va PyInstaller bilan yigʻilgan
+(bu vosita zararli dasturlarda ham koʻp ishlatiladi). Shuning uchun antiviruslar, ayniqsa Windows
+Defender, uni `Trojan:Win32/Wacatac…!ml` kabi nom bilan belgilashi mumkin.
+
+Ikki xil ogohlantirishni farqlang:
+
+| Ogohlantirish | Nima qilish kerak |
+|---------------|-------------------|
+| **"Windows protected your PC"** (SmartScreen) — fayl oʻchirilmaydi | *More info → Run anyway*. Bu virus degani emas, "fayl hali tanilmagan" degani. Faqat imzo yoki vaqt oʻtishi bilan yoʻqoladi (yuqoriga qarang). |
+| **"Threat found" / «Обнаружены угрозы»** (Defender) — fayl karantinga tushadi | Foydalanuvchi: *Windows Security → Virus & threat protection → Protection history* → yozuvni oching → *Actions → Allow on device*, soʻng qayta oʻrnating. Ishlab chiquvchi: faylni Microsoft'ga yuboring (pastda). |
+
+Notoʻgʻri signalni kamaytirish uchun CI har safar PyInstaller bootloader'ini manbadan yigʻadi
+(tayyor bootloader koʻp zararli dasturlarda uchraydi) va `.exe` ga versiya maʼlumotini yozadi
+(nomi, versiyasi, tavsifi — *Properties → Details*).
+
+Defender baribir belgilasa — **faylni Microsoft'ga yuboring** (eng samarali yoʻl: tekshirilgach
+Defender bazasi hamma kompyuterlarda yangilanadi, odatda bir necha kunda):
+
+1. https://www.microsoft.com/en-us/wdsi/filesubmission → **Software developer** (Microsoft akkaunti bilan kiriladi).
+2. Belgilangan faylni yuklang (masalan `YangiAlifbo-Setup-windows-x64.exe`), mahsulot: *Microsoft Defender Antivirus*.
+3. Fayl turi sifatida "notoʻgʻri aniqlangan" (*Incorrectly detected as malware*) ni tanlang, Defender koʻrsatgan
+   nomni yozing va dastur nima qilishini qisqa tushuntiring.
+
+Har bir yangi versiya — yangi fayl, shuning uchun belgilansa, uni ham yuborish kerak boʻlishi mumkin.
+Qaysi antiviruslar belgilashini https://www.virustotal.com da koʻrish mumkin (yuklangan fayl ommaga
+va antivirus kompaniyalariga ochiq boʻladi — ommaviy reliz fayli uchun bu muammo emas).
 
 ### Ommaviy yuklab olish manzili
 

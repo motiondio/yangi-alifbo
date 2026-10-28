@@ -6,6 +6,7 @@ dist-portable/
 icon.png
 icon.ico
 icon.icns
+version_info.txt
 signing/*.p12
 signing/*.pem
 signing/*.b64

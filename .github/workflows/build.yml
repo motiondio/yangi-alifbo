@@ -51,24 +51,38 @@ jobs:
           python-version: "3.12"
 
       - name: Kutubxonalar
+        shell: bash
         run: |
           python -m pip install --upgrade pip
-          pip install pyinstaller pynput pystray pillow
+          pip install pynput pystray pillow
+          if [ "$RUNNER_OS" != "Windows" ]; then pip install pyinstaller; fi
 
       - name: Kutubxonalar (macOS)
         if: runner.os == 'macOS'
         run: pip install pyobjc-framework-Cocoa pyobjc-framework-Quartz pyobjc-framework-ApplicationServices pyobjc-framework-ServiceManagement
 
-      # Brauzer manzil satridagi belgilangan taklifni aniqlash uchun (UI Automation).
+      # PyInstaller: bootloader manbadan yigʻiladi.  Tayyor bootloader koʻp zararli dasturlarda ham
+      # uchragani uchun antiviruslar (Windows Defender "Trojan:Win32/Wacatac" va h.k.) uni bilan
+      # yigʻilgan .exe ni koʻpincha "virus" deb belgilaydi.  Yigʻib boʻlmasa – pip xato beradi.
+      # comtypes: brauzer manzil satridagi belgilangan taklifni aniqlash uchun (UI Automation).
       # UIAutomationClient moduli oldindan yaratiladi – yigʻilgan .exe uni ishga tushganda yaratmasin.
       - name: Kutubxonalar (Windows)
         if: runner.os == 'Windows'
+        env:
+          PYINSTALLER_COMPILE_BOOTLOADER: "1"
         run: |
+          pip install --no-binary=pyinstaller pyinstaller
           pip install comtypes
           python -c "import comtypes.client; comtypes.client.GetModule('UIAutomationCore.dll')"
 
       - name: Ikonka
         run: python make_icon.py
+
+      # Versiya maʼlumoti (Properties → Details): nomsiz, versiyasiz .exe antiviruslarga shubhaliroq koʻrinadi
+      - name: Versiya maʼlumoti (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: python make_version_info.py "${{ inputs.version || '0.0.0' }}"
 
       # ---------------------------------------------------------------- Windows
       - name: Yigʻish (Windows, bitta .exe)
@@ -76,7 +90,7 @@ jobs:
         shell: bash
         run: |
           pyinstaller --noconfirm --clean --onefile --noconsole \
-            --name YangiAlifbo --icon icon.ico \
+            --name YangiAlifbo --icon icon.ico --version-file version_info.txt \
             --add-data "config.json;." \
             --hidden-import pystray._win32 \
             --hidden-import pynput.keyboard._win32 --hidden-import pynput.mouse._win32 \
@@ -89,7 +103,7 @@ jobs:
         shell: bash
         run: |
           pyinstaller --noconfirm --clean --onedir --noconsole --contents-directory lib \
-            --name YangiAlifbo --icon icon.ico \
+            --name YangiAlifbo --icon icon.ico --version-file version_info.txt \
             --add-data "config.json;." \
             --hidden-import pystray._win32 \
             --hidden-import pynput.keyboard._win32 --hidden-import pynput.mouse._win32 \
@@ -321,6 +335,7 @@ jobs:
 
             **Windows:** `YangiAlifbo-Setup-windows-x64.exe` ni ishga tushiring. SmartScreen ogohlantirsa: *More info → Run anyway*.
             Soat yonida yashil "ö" belgisi paydo boʻladi.
+            Antivirus faylni "virus" deb karantinga olsa – bu notoʻgʻri signal: [qoʻllanma](https://github.com/motiondio/yangi-alifbo#antivirus-virus-desa).
 
             **macOS (3 qadam):**
             1. `.dmg` ni oching va `Yangi Alifbo` ni **Applications** papkasiga sudrab tashlang
