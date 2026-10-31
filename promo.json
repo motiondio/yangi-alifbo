@@ -1,0 +1,16 @@
+{
+  "_izoh": "Ilovadagi 'Biz bilan' boʻlimi va tray menyusidagi havolalar. Bu faylni GitHub'da tahrirlang – ilova yangi versiyasiz yangilanadi. Faqat https:// havolalar koʻrsatiladi; url boʻsh boʻlsa – yashiriladi.",
+  "links": [
+    {"title": "Instagram", "url": ""},
+    {"title": "YouTube", "url": ""},
+    {"title": "Telegram", "url": ""}
+  ],
+  "ads": [
+    {
+      "title": "Yangi Alifbo",
+      "text": "Yangi oʻzbek lotin alifbosi 2027-yil 22-apreldan kuchga kiradi. Dasturni doʻstlaringizga ham ulashing!",
+      "button": "Yuklab olish sahifasi",
+      "url": "https://github.com/motiondio/yangi-alifbo/releases/latest"
+    }
+  ]
+}

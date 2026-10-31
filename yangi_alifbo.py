@@ -23,7 +23,6 @@ macOS da yigʻilgan .app:
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import queue
 import re
@@ -61,22 +60,10 @@ except Exception as exc:  # pragma: no cover  (ImportError yoki Linux'da DISPLAY
     print(f"pynput yuklanmadi: {exc}\nOʻrnating:  pip install pynput", file=sys.stderr)
     sys.exit(1)
 
+from alifbo_apps import frontmost_app_id
+from alifbo_config import (allowed_ids, app_allowed, app_version, find_bundled, load_config,
+                           load_promo, user_config_path)
 from alifbo_core import TUTUQ, Engine
-
-DEFAULT_CONFIG = {
-    # Yoqish/oʻchirish tezkor tugmasi (pynput formati).  Mac: Ctrl+Option+U
-    "hotkey": "<ctrl>+<alt>+u",
-    # Dastur ishga tushganda almashtirish yoqilgan boʻlsinmi
-    "enabled_on_start": True,
-    # Almashtirishdan soʻng darhol Backspace bosilsa asl yozuvni qaytarish
-    "backspace_undo": True,
-    # "s'h" → "sh" (ş emas).  Is'hoq → Ishoq
-    "strip_sh_apostrophe": True,
-    # Tutuq belgisi: null – tegilmaydi;  "ʼ" – harfdan keyingi ' belgisi ʼ (U+02BC) ga almashadi
-    "tutuq_belgisi": None,
-    # Tizim trayida belgi koʻrsatish (pystray + pillow oʻrnatilgan boʻlsa)
-    "tray": True,
-}
 
 _MODIFIERS = {
     Key.ctrl, Key.ctrl_l, Key.ctrl_r,
@@ -85,30 +72,6 @@ _MODIFIERS = {
 }
 # Bu tugmalar kontekstni oʻzgartirmaydi (buferni tozalamaymiz)
 _IGNORED = {Key.shift, Key.shift_l, Key.shift_r, Key.caps_lock}
-
-
-# ------------------------------------------------------------------ config
-def _base_dir() -> str:
-    if IS_FROZEN:
-        return os.path.dirname(os.path.abspath(sys.executable))
-    return os.path.dirname(os.path.abspath(__file__))
-
-
-def load_config() -> dict:
-    cfg = dict(DEFAULT_CONFIG)
-    candidates = [os.path.join(_base_dir(), "config.json")]
-    meipass = getattr(sys, "_MEIPASS", None)
-    if meipass:
-        candidates.append(os.path.join(meipass, "config.json"))
-    for path in candidates:
-        if os.path.isfile(path):
-            try:
-                with open(path, "r", encoding="utf-8") as fh:
-                    cfg.update(json.load(fh))
-            except (OSError, ValueError) as exc:
-                print(f"config.json oʻqilmadi ({exc}); standart sozlamalar ishlatiladi.")
-            break
-    return cfg
 
 
 # ----------------------------------------------------------------- dialog
@@ -153,17 +116,19 @@ def alert(message: str, *, buttons=("OK",), default: str | None = None,
 _instance_lock = None
 
 
-def acquire_single_instance() -> bool:
-    """Dastur ikki marta ochilsa harflar ikki marta almashadi – shunga yoʻl qoʻymaymiz."""
+def acquire_single_instance(name: str = "") -> bool:
+    """Dastur ikki marta ochilsa harflar ikki marta almashadi – shunga yoʻl qoʻymaymiz.
+    name – boshqa qulf (masalan "Settings": sozlamalar oynasi ham bitta boʻlsin)."""
     global _instance_lock
     try:
         if IS_WIN:
             import ctypes
             kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-            _instance_lock = kernel32.CreateMutexW(None, False, "Local\\YangiAlifboSingleInstance")
+            _instance_lock = kernel32.CreateMutexW(None, False, f"Local\\YangiAlifbo{name}SingleInstance")
             return ctypes.get_last_error() != 183  # ERROR_ALREADY_EXISTS
         import fcntl
-        path = os.path.join(os.path.expanduser("~"), ".yangi_alifbo.lock")
+        suffix = f"_{name.lower()}" if name else ""
+        path = os.path.join(os.path.expanduser("~"), f".yangi_alifbo{suffix}.lock")
         fh = open(path, "w")
         try:
             fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -498,8 +463,13 @@ else:
 
 # -------------------------------------------------------------------- app
 class App:
-    def __init__(self, cfg: dict) -> None:
+    def __init__(self, cfg: dict, overrides: dict | None = None) -> None:
         self.cfg = cfg
+        # Buyruq qatoridagi sozlamalar (--no-undo …) config qayta oʻqilganda ham saqlanadi
+        self._overrides = dict(overrides or {})
+        self.app_ids = allowed_ids(cfg)   # None – hamma dasturlarda
+        self._app_id = None               # oxirgi aniqlangan faol dastur
+        self._app_checked = 0.0           # qachon aniqlangan (monotonic); 0 – qayta aniqlash kerak
         self.engine = Engine(
             strip_sh_apostrophe=bool(cfg["strip_sh_apostrophe"]),
             tutuq=cfg["tutuq_belgisi"] or None,
@@ -559,6 +529,7 @@ class App:
     def _handle(self, kind, key):
         if kind == "reset":
             self.engine.reset()
+            self._app_checked = 0.0  # sichqoncha bilan boshqa dasturga oʻtilgan boʻlishi mumkin
             return
         if kind == "release":
             self._mods.discard(key)
@@ -566,6 +537,7 @@ class App:
         if key in _MODIFIERS:
             self._mods.add(key)
             self.engine.reset()
+            self._app_checked = 0.0  # Cmd+Tab / Alt+Tab
             return
         if key in _IGNORED:
             return
@@ -573,6 +545,9 @@ class App:
             return
         if self._mods:
             # Ctrl/Alt/Cmd + tugma – bu matn emas, buyruq
+            self.engine.reset()
+            return
+        if not self._app_allowed():
             self.engine.reset()
             return
 
@@ -613,6 +588,52 @@ class App:
             self._suggestion = bool(action.undo) and autocomplete_selected()
         finally:
             self._injecting.clear()
+
+    def _app_allowed(self) -> bool:
+        """Faol dastur roʻyxatdami.  Har tugmada emas – 0.5 s da bir marta, yoki dastur
+        almashgan boʻlishi mumkin boʻlganda (sichqoncha, Cmd/Alt+Tab) qayta aniqlanadi."""
+        ids = self.app_ids
+        if ids is None:
+            return True
+        now = time.monotonic()
+        if now - self._app_checked > 0.5:
+            app_id = frontmost_app_id()
+            if app_id != self._app_id:
+                self._app_id = app_id
+                self.engine.reset()  # boshqa dastur – eski kontekst yaroqsiz
+            self._app_checked = now
+        return app_allowed(self._app_id, ids)
+
+    # ---- sozlamalar --------------------------------------------------------------
+    def apply_config(self, cfg: dict) -> None:
+        cfg.update(self._overrides)
+        cfg["hotkey"] = self.cfg["hotkey"]  # tezkor tugma faqat qayta ishga tushirilganda oʻzgaradi
+        self.cfg = cfg
+        self.engine.strip_sh_apostrophe = bool(cfg["strip_sh_apostrophe"])
+        self.engine.tutuq = cfg["tutuq_belgisi"] or None
+        self.engine.backspace_undo = bool(cfg["backspace_undo"])
+        self.app_ids = allowed_ids(cfg)
+        self._app_checked = 0.0
+
+    def _watch_config(self):
+        """Sozlamalar oynasi foydalanuvchi config.json ini oʻzgartirsa – darhol qoʻllaymiz."""
+        path = user_config_path()
+
+        def mtime():
+            try:
+                return os.stat(path).st_mtime_ns
+            except OSError:
+                return None
+        last = mtime()
+        while not self._stop.wait(1.0):
+            now = mtime()
+            if now != last:
+                last = now
+                try:
+                    self.apply_config(load_config())
+                    print(f"[{APP_NAME}] sozlamalar yangilandi")
+                except Exception as exc:
+                    print(f"Sozlamalarni qoʻllab boʻlmadi: {exc!r}")
 
     # ---- boshqaruv -------------------------------------------------------------
     def toggle(self, *_):
@@ -660,6 +681,7 @@ class App:
             self._hotkeys = None
 
         threading.Thread(target=self.worker, name="alifbo-worker", daemon=True).start()
+        threading.Thread(target=self._watch_config, name="alifbo-config", daemon=True).start()
         self._kb_listener.start()
         self._mouse_listener.start()
         if self._hotkeys is not None:
@@ -692,6 +714,29 @@ def make_icon_image(enabled: bool):
     return img
 
 
+def open_settings(*_):
+    """Sozlamalar oynasi – alohida jarayon: tray va tkinter bitta asosiy oqimni boʻlisha
+    olmaydi, internetga ham faqat u ulanadi (klaviatura kuzatuvchi jarayon emas)."""
+    if IS_FROZEN:
+        cmd = [sys.executable]
+    else:
+        python = sys.executable
+        if IS_WIN:
+            python = python.replace("python.exe", "pythonw.exe")  # konsol oynasiz
+        cmd = [python, os.path.abspath(__file__)]
+    try:
+        subprocess.Popen(cmd + ["--settings"], close_fds=True)
+    except Exception as exc:
+        print(f"Sozlamalar oynasini ochib boʻlmadi: {exc!r}")
+
+
+def _url_opener(url: str):
+    def open_url():
+        import webbrowser
+        webbrowser.open(url)
+    return open_url
+
+
 def make_tray(app: App):
     try:
         import pystray
@@ -706,16 +751,25 @@ def make_tray(app: App):
     def toggle_autostart(icon=None, item=None):
         set_autostart(not autostart_enabled())
 
-    menu = pystray.Menu(
+    links = [pystray.MenuItem(link["title"], _url_opener(link["url"]))
+             for link in load_promo()["links"]]
+    items = [
         pystray.MenuItem(label, app.toggle, default=True),
+        pystray.MenuItem("Sozlamalar…", open_settings),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Kompyuter bilan ishga tushirish", toggle_autostart,
                          checked=lambda item: autostart_enabled(),
                          visible=lambda item: autostart_supported()),
+    ]
+    if links:
+        items.append(pystray.MenuItem("Biz bilan", pystray.Menu(*links)))
+    items += [
+        pystray.Menu.SEPARATOR,
         pystray.MenuItem(f"Tezkor tugma: {app.cfg['hotkey']}", None, enabled=False),
+        pystray.MenuItem(f"{APP_NAME} {app_version()}", None, enabled=False),
         pystray.MenuItem("Chiqish", app.stop),
-    )
-    return pystray.Icon("yangi-alifbo", image, f"{APP_NAME}: yoqilgan", menu)
+    ]
+    return pystray.Icon("yangi-alifbo", image, f"{APP_NAME}: yoqilgan", pystray.Menu(*items))
 
 
 # ------------------------------------------------------------------ check
@@ -757,6 +811,19 @@ def run_check() -> int:
             print("Windows UI Automation (comtypes): OK")
         except Exception as exc:
             problems.append(f"Windows UI Automation: {exc!r}")
+    try:
+        import tkinter
+        import alifbo_settings  # noqa: F401
+        print(f"sozlamalar oynasi (tkinter {tkinter.TkVersion}): OK")
+    except Exception as exc:
+        problems.append(f"sozlamalar oynasi: {exc!r}")
+    version = app_version()
+    print(f"versiya: {version}")
+    if IS_FROZEN:
+        # CI fayllarni --add-data bilan qoʻshishni unutmasin
+        for name in ("app_version.txt", "promo.json", "config.json"):
+            if not find_bundled(name, None):
+                problems.append(f"{name} dastur ichida yoʻq")
     eng = Engine()
     eng.feed_char("s")
     act = eng.feed_char("h")
@@ -788,6 +855,7 @@ def parse_args(argv=None):
                    help="faqat tekshiruv: modullar yuklanadimi (CI uchun), soʻng chiqish")
     p.add_argument("--autostart", choices=("on", "off"),
                    help="kompyuter bilan avtomatik ishga tushirishni yoqish/oʻchirish va chiqish")
+    p.add_argument("--settings", action="store_true", help="sozlamalar oynasini ochish")
     return p.parse_args(argv)
 
 
@@ -800,31 +868,38 @@ def main(argv=None) -> int:
         print("Avtomatik ishga tushirish:", ("yoqildi" if args.autostart == "on" else "oʻchirildi") if ok else "sozlanmadi")
         return 0 if ok else 1
 
-    cfg = load_config()
+    if args.settings:
+        if not acquire_single_instance("Settings"):
+            return 0  # oyna allaqachon ochiq
+        from alifbo_settings import run_settings
+        return run_settings(autostart=(autostart_supported, autostart_enabled, set_autostart))
+
+    overrides = {}
     if args.hotkey:
-        cfg["hotkey"] = args.hotkey
+        overrides["hotkey"] = args.hotkey
     if args.off:
-        cfg["enabled_on_start"] = False
+        overrides["enabled_on_start"] = False
     if args.no_undo:
-        cfg["backspace_undo"] = False
+        overrides["backspace_undo"] = False
     if args.keep_sh_apostrophe:
-        cfg["strip_sh_apostrophe"] = False
+        overrides["strip_sh_apostrophe"] = False
     if args.tutuq:
-        cfg["tutuq_belgisi"] = TUTUQ
+        overrides["tutuq_belgisi"] = TUTUQ
     if args.no_tray:
-        cfg["tray"] = False
+        overrides["tray"] = False
+    cfg = load_config()
+    cfg.update(overrides)
 
     # macOS: Downloads/zip ichidan ochilgan boʻlsa – Applications ga oʻrnatib, qayta ochamiz
     if macos_self_install():
         return 0
 
     if not acquire_single_instance():
-        alert(f"{APP_NAME} allaqachon ishlamoqda.\n\n"
-              + ("Menyu satridagi (yuqori oʻngdagi) ö belgisiga qarang." if IS_MAC
-                 else "Soat yonidagi ö belgisiga qarang."), icon="note")
+        # Dastur allaqachon ishlamoqda – qayta ochilgani sozlamalarni koʻrmoqchi degani
+        open_settings()
         return 0
 
-    app = App(cfg)
+    app = App(cfg, overrides)
     tray = make_tray(app) if cfg.get("tray", True) else None
     app.tray = tray
     if tray is None and IS_FROZEN and IS_MAC:

@@ -1,0 +1,13 @@
+#!/bin/sh
+# Oʻrnatilgandan keyin (root sifatida).
+APP="/Applications/Yangi Alifbo.app"
+# Karantin belgisi qolmasin: Gatekeeper ilovani qayta toʻsmasin, "App Translocation" boʻlmasin
+xattr -cr "$APP" 2>/dev/null || true
+# Buyruq qatoridan (sudo installer -pkg …) oʻrnatilganda ilovani ochmaymiz
+[ -n "$COMMAND_LINE_INSTALL" ] && exit 0
+# Ilovani tizimga kirgan foydalanuvchi nomidan ochamiz – u darhol ruxsat soʻraydi
+USER_NAME="$(stat -f%Su /dev/console)"
+if [ -n "$USER_NAME" ] && [ "$USER_NAME" != "root" ] && [ "$USER_NAME" != "loginwindow" ]; then
+  launchctl asuser "$(id -u "$USER_NAME")" sudo -u "$USER_NAME" open "$APP" || true
+fi
+exit 0

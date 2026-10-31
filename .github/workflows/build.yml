@@ -28,7 +28,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: python -m unittest -v test_alifbo_core
+      - run: python -m unittest -v test_alifbo_core test_alifbo_config
 
   build:
     name: Yigʻish (${{ matrix.name }})
@@ -54,7 +54,7 @@ jobs:
         shell: bash
         run: |
           python -m pip install --upgrade pip
-          pip install pynput pystray pillow
+          pip install pynput pystray pillow certifi
           if [ "$RUNNER_OS" != "Windows" ]; then pip install pyinstaller; fi
 
       - name: Kutubxonalar (macOS)
@@ -78,9 +78,9 @@ jobs:
       - name: Ikonka
         run: python make_icon.py
 
-      # Versiya maʼlumoti (Properties → Details): nomsiz, versiyasiz .exe antiviruslarga shubhaliroq koʻrinadi
-      - name: Versiya maʼlumoti (Windows)
-        if: runner.os == 'Windows'
+      # app_version.txt – dastur ichiga (sozlamalar oynasi, macOS Info.plist);  version_info.txt – Windows
+      # .exe uchun (Properties → Details): nomsiz, versiyasiz .exe antiviruslarga shubhaliroq koʻrinadi
+      - name: Versiya maʼlumoti
         shell: bash
         run: python make_version_info.py "${{ inputs.version || '0.0.0' }}"
 
@@ -91,7 +91,7 @@ jobs:
         run: |
           pyinstaller --noconfirm --clean --onefile --noconsole \
             --name YangiAlifbo --icon icon.ico --version-file version_info.txt \
-            --add-data "config.json;." \
+            --add-data "config.json;." --add-data "promo.json;." --add-data "app_version.txt;." \
             --hidden-import pystray._win32 \
             --hidden-import pynput.keyboard._win32 --hidden-import pynput.mouse._win32 \
             --hidden-import comtypes.gen.UIAutomationClient \
@@ -104,7 +104,7 @@ jobs:
         run: |
           pyinstaller --noconfirm --clean --onedir --noconsole --contents-directory lib \
             --name YangiAlifbo --icon icon.ico --version-file version_info.txt \
-            --add-data "config.json;." \
+            --add-data "config.json;." --add-data "promo.json;." --add-data "app_version.txt;." \
             --hidden-import pystray._win32 \
             --hidden-import pynput.keyboard._win32 --hidden-import pynput.mouse._win32 \
             --hidden-import comtypes.gen.UIAutomationClient \
@@ -175,7 +175,7 @@ jobs:
           pyinstaller --noconfirm --clean --onedir --windowed \
             --name "Yangi Alifbo" --icon icon.icns \
             --osx-bundle-identifier uz.yangialifbo.app \
-            --add-data "config.json:." \
+            --add-data "config.json:." --add-data "promo.json:." --add-data "app_version.txt:." \
             --hidden-import pystray._darwin \
             --hidden-import pynput.keyboard._darwin --hidden-import pynput.mouse._darwin \
             yangi_alifbo.py
@@ -183,6 +183,11 @@ jobs:
           # Dock'da koʻrinmasin – faqat menyu satrida (tray) ishlaydi
           /usr/libexec/PlistBuddy -c "Add :LSUIElement bool true" "$APP/Contents/Info.plist"
           /usr/libexec/PlistBuddy -c "Add :NSHumanReadableCopyright string 'Yangi oʻzbek lotin alifbosi uchun avtomatik harf toʻgʻirlagich'" "$APP/Contents/Info.plist"
+          # Finder → Get Info → Version (PyInstaller oʻzi 0.0.0 yozadi)
+          VER="$(cat app_version.txt)"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VER" "$APP/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $VER" "$APP/Contents/Info.plist" 2>/dev/null \
+            || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $VER" "$APP/Contents/Info.plist"
 
       - name: Imzolash (macOS – secret'dagi sertifikat (Developer ID yoki self-signed), boʻlmasa ad-hoc)
         if: runner.os == 'macOS'
@@ -261,7 +266,8 @@ jobs:
           "$APP_EXE" --help
           "$APP_EXE" --check | tee check.log
           grep -q "TEKSHIRUV: OK" check.log
-          plutil -p "dist/Yangi Alifbo.app/Contents/Info.plist" | grep -E "LSUIElement|CFBundleIdentifier|CFBundleIconFile"
+          plutil -p "dist/Yangi Alifbo.app/Contents/Info.plist" | grep -E "LSUIElement|CFBundleIdentifier|CFBundleIconFile|CFBundleShortVersionString"
+          grep -q "\"CFBundleShortVersionString\" => \"$(cat app_version.txt)\"" <(plutil -p "dist/Yangi Alifbo.app/Contents/Info.plist")
           echo "OK: yigʻilgan .app ishga tushdi va barcha modullar yuklandi"
 
       - name: DMG (macOS – Applications ga sudrab oʻrnatish uchun)
@@ -286,6 +292,32 @@ jobs:
           fi
           ls -la dist
 
+      # Splice kabi bosqichma-bosqich oʻrnatuvchi: Introduction → Read Me → License → Install → Summary
+      - name: PKG oʻrnatuvchi (macOS)
+        if: runner.os == 'macOS'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          case "${{ matrix.name }}" in *apple-silicon) ARCHS="arm64" ;; *) ARCHS="x86_64,arm64" ;; esac
+          PKG="dist/YangiAlifbo-${{ matrix.name }}.pkg"
+          sh installer/macos/build_pkg.sh "dist/Yangi Alifbo.app" "$(cat app_version.txt)" "$ARCHS" "$PKG"
+          # .pkg ni faqat "Developer ID Installer" sertifikati imzolay oladi (Application sertifikati emas)
+          INSTALLER_ID="$(security find-identity -v 2>/dev/null | grep 'Developer ID Installer' | head -1 | awk '{print $2}')"
+          if [ -n "$INSTALLER_ID" ]; then
+            productsign --sign "$INSTALLER_ID" --timestamp "$PKG" "$PKG.signed" && mv "$PKG.signed" "$PKG"
+            if [ "$MAC_NOTARIZED" = "1" ]; then
+              xcrun notarytool submit "$PKG" --apple-id "$APPLE_ID" --password "$APPLE_APP_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+              xcrun stapler staple "$PKG"
+            fi
+          else
+            echo "::notice::Developer ID Installer sertifikati yoʻq – .pkg imzosiz (macOS bir marta 'Open Anyway' soʻraydi)"
+          fi
+          pkgutil --check-signature "$PKG" || true
+          pkgutil --payload-files "$PKG" | grep -q "Applications/Yangi Alifbo.app/Contents/MacOS/Yangi Alifbo"
+          ls -la dist
+
       - name: Artefakt
         uses: actions/upload-artifact@v4
         with:
@@ -296,6 +328,7 @@ jobs:
             dist/YangiAlifbo-${{ matrix.name }}-portable.zip
             dist/YangiAlifbo-${{ matrix.name }}.zip
             dist/YangiAlifbo-${{ matrix.name }}.dmg
+            dist/YangiAlifbo-${{ matrix.name }}.pkg
           if-no-files-found: error
 
   release:
@@ -328,8 +361,10 @@ jobs:
             | `YangiAlifbo-Setup-windows-x64.exe` | **Windows 10/11 – oʻrnatuvchi** (Start menyu, avtomatik ishga tushish, oʻchirish) |
             | `YangiAlifbo-windows-x64.exe` | Windows – bitta fayl, oʻrnatishsiz |
             | `YangiAlifbo-windows-x64-portable.zip` | Windows – papka varianti (Defender .exe ga shubha qilsa) |
-            | `YangiAlifbo-macos-apple-silicon.dmg` / `.zip` | Mac (M1/M2/M3/M4) |
-            | `YangiAlifbo-macos-intel.dmg` / `.zip` | Mac (Intel) |
+            | `YangiAlifbo-macos-apple-silicon.pkg` | **Mac (M1/M2/M3/M4) – oʻrnatuvchi** |
+            | `YangiAlifbo-macos-intel.pkg` | **Mac (Intel) – oʻrnatuvchi** |
+            | `YangiAlifbo-macos-apple-silicon.dmg` / `.zip` | Mac (M1–M4) – Applications ga sudrab oʻrnatish |
+            | `YangiAlifbo-macos-intel.dmg` / `.zip` | Mac (Intel) – Applications ga sudrab oʻrnatish |
             | `YangiAlifbo.ahk` | Windows – AutoHotkey v2 varianti |
             | `install-mac.sh` | Mac – Terminal orqali oʻrnatish: `sh ~/Downloads/install-mac.sh` (Gatekeeper'ni chetlab oʻtadi) |
 
@@ -338,11 +373,11 @@ jobs:
             Antivirus faylni "virus" deb karantinga olsa – bu notoʻgʻri signal: [qoʻllanma](https://github.com/motiondio/yangi-alifbo#antivirus-virus-desa).
 
             **macOS (3 qadam):**
-            1. `.dmg` ni oching va `Yangi Alifbo` ni **Applications** papkasiga sudrab tashlang
-               (yoki `.zip` ni ochib ilovani ikki marta bosing – u oʻzi Applications ga oʻrnatishni taklif qiladi).
-            2. Applications dan oching. macOS toʻsadi: "Apple could not verify…" (ruscha: «Не удаётся открыть программу») –
-               *System Settings → Privacy & Security* → pastdagi **Open Anyway** («Всё равно открыть»), keyin yana oching (bir marta).
-               M1–M4 uchun `apple-silicon`, Intel uchun `intel` faylini oling.
+            1. `.pkg` ni oching (M1–M4 uchun `apple-silicon`, Intel uchun `intel`). macOS toʻsadi: "Apple could not verify…"
+               (ruscha: «Не удаётся открыть») – *System Settings → Privacy & Security* → pastdagi **Open Anyway**
+               («Всё равно открыть»), keyin yana oching (bir marta).
+            2. Oʻrnatuvchida *Continue → Agree → Install* (Mac paroli soʻraladi). Ilova oʻzi ochiladi.
+               (`.dmg` varianti: ilovani **Applications** ga sudrab, u yerdan oching.)
             3. Ilova ikkita ruxsat soʻraydi – *System Settings → Privacy & Security* → **Accessibility** va
                **Input Monitoring** roʻyxatlarida "Yangi Alifbo" ni yoqing. Ruxsat berilgach dastur oʻzi davom etadi;
                davom etmasa, menyu satridagi belgidan *Chiqish* qilib qayta oching.

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Dastur ikonkasini (ö belgisi) yaratadi: icon.png, icon.ico (Windows), icon.icns (macOS).
+"""Dastur ikonkasini (ö belgisi) yaratadi: icon.png, icon.ico (Windows), icon.icns (macOS)
+va macOS .pkg oʻrnatuvchisi foni: installer_bg.png.
 Yigʻish (PyInstaller) oldidan ishga tushiriladi.  Talab: pillow."""
 import sys
 
@@ -23,13 +24,22 @@ def draw(size: int, enabled: bool = True) -> Image.Image:
     return img
 
 
+def installer_background() -> Image.Image:
+    """macOS oʻrnatuvchi oynasining chap pastki burchagidagi belgi (fon shaffof)."""
+    img = Image.new("RGBA", (620, 418), (0, 0, 0, 0))
+    logo = draw(512).resize((112, 112), Image.LANCZOS)
+    img.paste(logo, (28, 418 - 112 - 28), logo)
+    return img
+
+
 def main() -> int:
     big = draw(1024)
     big.save("icon.png")
     sizes = [16, 24, 32, 48, 64, 128, 256]
     big.save("icon.ico", sizes=[(n, n) for n in sizes])
     big.save("icon.icns")
-    print("icon.png, icon.ico, icon.icns yaratildi")
+    installer_background().save("installer_bg.png")
+    print("icon.png, icon.ico, icon.icns, installer_bg.png yaratildi")
     return 0
 
 

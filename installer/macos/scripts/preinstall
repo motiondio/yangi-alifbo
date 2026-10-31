@@ -1,0 +1,7 @@
+#!/bin/sh
+# Oʻrnatishdan oldin (root sifatida): ishlab turgan nusxani toʻxtatib, eski ilovani olib tashlaymiz –
+# yangi fayllar eski versiyaniki bilan aralashib ketmasin.
+pkill -f "Yangi Alifbo.app/Contents/MacOS/" 2>/dev/null || true
+sleep 1
+rm -rf "/Applications/Yangi Alifbo.app"
+exit 0

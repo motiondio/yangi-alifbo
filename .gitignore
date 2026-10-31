@@ -7,6 +7,8 @@ icon.png
 icon.ico
 icon.icns
 version_info.txt
+app_version.txt
+installer_bg.png
 signing/*.p12
 signing/*.pem
 signing/*.b64

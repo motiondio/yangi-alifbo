@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Windows .exe uchun versiya maʼlumoti (Properties → Details) faylini yaratadi: version_info.txt.
-PyInstaller'ga --version-file version_info.txt bilan beriladi.
+"""Versiya fayllarini yaratadi:
+  * version_info.txt – Windows .exe uchun (Properties → Details), PyInstaller --version-file
+  * app_version.txt  – dastur ichiga (--add-data): sozlamalar oynasi, tray menyusi, macOS Info.plist
 
     python make_version_info.py 1.0.4
 """
@@ -41,7 +42,9 @@ def main(argv=None) -> int:
     nums += [0] * (4 - len(nums))
     with open("version_info.txt", "w", encoding="utf-8") as fh:
         fh.write(TEMPLATE.format(nums=tuple(nums), version=version))
-    print(f"version_info.txt yaratildi: {version} {tuple(nums)}")
+    with open("app_version.txt", "w", encoding="utf-8") as fh:
+        fh.write(version + "\n")
+    print(f"version_info.txt, app_version.txt yaratildi: {version} {tuple(nums)}")
     return 0
 
 

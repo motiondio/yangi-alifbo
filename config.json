@@ -4,5 +4,7 @@
   "backspace_undo": true,
   "strip_sh_apostrophe": true,
   "tutuq_belgisi": null,
-  "tray": true
+  "tray": true,
+  "apps_mode": "list",
+  "apps": null
 }

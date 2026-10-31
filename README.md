@@ -30,8 +30,10 @@ Tayyor fayllar **[Releases](https://github.com/motiondio/yangi-alifbo/releases/l
 | `YangiAlifbo-Setup-windows-x64.exe` | **Windows 10/11 — oʻrnatuvchi** (Start menyu, avtomatik ishga tushish, oʻchirish) |
 | `YangiAlifbo-windows-x64.exe` | Windows — bitta fayl, oʻrnatishsiz |
 | `YangiAlifbo-windows-x64-portable.zip` | Windows — papka varianti (Defender `.exe` ga shubha qilsa) |
-| `YangiAlifbo-macos-apple-silicon.dmg` / `.zip` | Mac — M1/M2/M3/M4 |
-| `YangiAlifbo-macos-intel.dmg` / `.zip` | Mac — Intel |
+| `YangiAlifbo-macos-apple-silicon.pkg` | **Mac — M1/M2/M3/M4, oʻrnatuvchi** |
+| `YangiAlifbo-macos-intel.pkg` | **Mac — Intel, oʻrnatuvchi** |
+| `YangiAlifbo-macos-apple-silicon.dmg` / `.zip` | Mac — M1/M2/M3/M4, Applications ga sudrab oʻrnatish |
+| `YangiAlifbo-macos-intel.dmg` / `.zip` | Mac — Intel, Applications ga sudrab oʻrnatish |
 | `YangiAlifbo.ahk` | Windows — AutoHotkey varianti (pastda) |
 
 **Windows:** `YangiAlifbo-Setup-windows-x64.exe` ni ishga tushiring. SmartScreen "Windows protected your PC" desa —
@@ -42,16 +44,15 @@ Soat yonida yashil **ö** belgisi chiqadi: chap tugma — yoqish/oʻchirish, oʻ
 Avtomatik ishga tushishi uchun: `Win+R` → `shell:startup` → shu papkaga `.exe` yorligʻini qoʻying.
 
 **macOS (3 qadam):**
-1. `.dmg` ni oching va `Yangi Alifbo` ni **Applications** papkasiga sudrab tashlang.
-   (`.zip` yuklab olgan boʻlsangiz, ilovani ikki marta bosing — u oʻzi Applications ga
-   oʻrnatishni taklif qiladi. Downloads papkasidan ishlatmang: macOS bunday ilovani har safar
-   tasodifiy vaqtinchalik papkadan ochadi va bergan ruxsatingizni saqlab qolmaydi.)
-2. Applications dan oching. Birinchi ochishda macOS toʻsadi: "Apple could not verify…" / "Not Opened"
-   (ruscha tizimda: «Не удалось открыть» / «Не удаётся открыть программу»). Bu Gatekeeper — ilova Apple
+1. `.pkg` ni oching (M1/M2/M3/M4 Mac uchun `apple-silicon`, eski Intel Mac uchun `intel`).
+   Birinchi ochishda macOS toʻsadi: "Apple could not verify…" / "Not Opened"
+   (ruscha tizimda: «Не удалось открыть» / «Не удаётся открыть программу»). Bu Gatekeeper — fayl Apple
    tomonidan notarizatsiya qilinmagan ($99/yil developer akkaunti kerak). Yechim: *System Settings →
    Privacy & Security* ga tushing, pastda **Open Anyway** («Всё равно открыть») ni bosing, keyin yana oching.
-   Terminal orqali ham mumkin: `xattr -cr "/Applications/Yangi Alifbo.app"`.
-   M1/M2/M3/M4 Mac uchun `apple-silicon`, eski Intel Mac uchun `intel` faylini oling.
+2. Oʻrnatuvchi oynasida *Continue → Continue → Agree → Install* (Mac paroli soʻraladi). Ilova
+   `/Applications` ga oʻrnatiladi va oʻzi ochiladi — undan keyin Gatekeeper uni qayta toʻsmaydi.
+   (`.dmg` varianti: ilovani **Applications** papkasiga sudrab, u yerdan oching. Downloads papkasidan
+   ishlatmang: macOS bunday ilovani har safar vaqtinchalik papkadan ochadi va ruxsatni saqlab qolmaydi.)
 3. Ilova ikkita ruxsat soʻraydi: *System Settings → Privacy & Security* → **Accessibility** va
    **Input Monitoring** roʻyxatlarida "Yangi Alifbo" ni yoqing. Ruxsat berilgach dastur oʻzi davom etadi
    (macOS "Quit & Reopen" desa — bosing). Davom etmasa — menyu satridagi belgidan *Chiqish* qilib, qayta oching.
@@ -126,9 +127,48 @@ Ruxsatsiz macOS klaviaturani kuzatishga yoʻl qoʻymaydi.
 | Yoqish / oʻchirish | **Ctrl+Alt+U** (Mac: Control+Option+U) yoki tray belgisi |
 | Almashtirishni bekor qilish | almashgandan keyin **darhol Backspace** — `ş` yana `sh` boʻladi va qayta almashmaydi |
 | `s` va `h` ni alohida qoldirish | `s'h` deb tering: `Is'hoq` → `Ishoq`, `as'hob` → `ashob` |
+| Sozlamalar | tray → **Sozlamalar…** (yoki dasturni qayta ochish) |
 | Chiqish | konsolda Ctrl+C yoki tray → Chiqish |
 
-Ingliz tilida yozayotganda (`shop`, `chat`) dasturni Ctrl+Alt+U bilan vaqtincha oʻchirib qoʻying.
+Dastur standart holatda faqat **tanlangan dasturlarda** ishlaydi (Telegram, WhatsApp, Word, Excel,
+brauzerlar …) — terminal, kod muharriri va oʻyinlarda aralashmaydi. Roʻyxat sozlamalar oynasida
+tahrirlanadi. Roʻyxatdagi dasturda inglizcha yozayotganda (`shop`, `chat`) Ctrl+Alt+U bilan vaqtincha oʻchiring.
+
+### Sozlamalar oynasi
+
+Tray belgisi → **Sozlamalar…** uch boʻlimli oynani ochadi:
+
+* **Umumiy** — kompyuter bilan ishga tushish, Backspace bilan qaytarish, `s'h`, tutuq belgisi.
+* **Dasturlar** — qaysi dasturlarda ishlashi: "Faqat roʻyxatdagi dasturlarda" (standart) yoki
+  "Hamma dasturlarda". *Qoʻshish…* hozir ochiq dasturlar roʻyxatini koʻrsatadi.
+* **Biz bilan** — eʼlonlar va Instagram / YouTube / Telegram havolalari (pastdagi `promo.json`).
+
+Oʻzgarishlar darhol kuchga kiradi: oyna foydalanuvchi papkasidagi `config.json` ga yozadi
+(macOS: `~/Library/Application Support/Yangi Alifbo/`, Windows: `%APPDATA%\Yangi Alifbo\`),
+ishlab turgan dastur esa faylni kuzatib, bir soniya ichida qayta oʻqiydi. Oyna alohida jarayonda
+ishlaydi — internetga (faqat `promo.json` uchun) klaviatura kuzatuvchi jarayon emas, shu oyna ulanadi.
+
+### Havolalar va eʼlonlar — `promo.json`
+
+"Biz bilan" boʻlimi va tray menyusidagi havolalar repodagi [`promo.json`](promo.json) dan olinadi.
+Uni GitHub'da tahrirlang (*promo.json → ✏️ → Commit changes*) — foydalanuvchilarda sozlamalar oynasi
+keyingi ochilganda yangilanadi, yangi versiya chiqarish shart emas:
+
+```json
+{
+  "links": [
+    {"title": "Instagram", "url": "https://instagram.com/…"},
+    {"title": "YouTube",   "url": "https://youtube.com/@…"},
+    {"title": "Telegram",  "url": "https://t.me/…"}
+  ],
+  "ads": [
+    {"title": "Sarlavha", "text": "Matn", "button": "Batafsil", "url": "https://…"}
+  ]
+}
+```
+
+Faqat `https://` havolalar koʻrsatiladi; `url` boʻsh boʻlsa — tugma yashiriladi. Eʼlonlar 3 tagacha.
+Internet boʻlmasa, oxirgi yuklab olingan nusxa (yoʻq boʻlsa — dastur ichidagi nusxa) koʻrsatiladi.
 
 ### Sozlamalar — `config.json`
 
@@ -139,15 +179,23 @@ Ingliz tilida yozayotganda (`shop`, `chat`) dasturni Ctrl+Alt+U bilan vaqtincha 
   "backspace_undo": true,
   "strip_sh_apostrophe": true,
   "tutuq_belgisi": null,
-  "tray": true
+  "tray": true,
+  "apps_mode": "list",
+  "apps": null
 }
 ```
+
+Dastur yonidagi `config.json` — standart qiymatlar; sozlamalar oynasi oʻzgartirganlari foydalanuvchi
+papkasidagi `config.json` da saqlanadi va ustun turadi.
 
 * `hotkey` — pynput formati: `<ctrl>`, `<alt>`, `<cmd>`, `<shift>`, `<f9>` … masalan `"<cmd>+<shift>+u"`.
 * `backspace_undo` — Backspace bilan asl yozuvni qaytarish.
 * `strip_sh_apostrophe` — `s'h` → `sh`. `false` boʻlsa apostrof qoladi (`Is'hoq`), lekin baribir `ş` boʻlmaydi.
 * `tutuq_belgisi` — `"ʼ"` qilib qoʻysangiz, harfdan keyingi oddiy `'` rasmiy tutuq belgisi
   (U+02BC) ga almashadi: `ma'no` → `maʼno`. Standart holatda apostroflar tegilmaydi.
+* `apps_mode` — `"list"`: faqat `apps` roʻyxatidagi dasturlarda; `"all"`: hamma dasturlarda.
+* `apps` — `[{"id": "ru.keepcoder.Telegram", "name": "Telegram"}, …]`; `id` — macOS'da bundle id,
+  Windows'da `.exe` nomi (`telegram.exe`). `null` — standart roʻyxat (`alifbo_config.py`).
 
 Buyruq qatori orqali ham: `--hotkey "<f9>"`, `--off`, `--no-undo`, `--keep-sh-apostrophe`, `--tutuq`, `--no-tray`.
 
@@ -165,17 +213,24 @@ va Mac (Intel) serverlarida yigʻib, Release'ga yuklaydi.
 Qoʻlda (oʻz kompyuteringizda, faqat oʻz tizimingiz uchun):
 
 ```bash
-pip install pyinstaller pynput pystray pillow
+pip install pyinstaller pynput pystray pillow certifi
 pip install comtypes                     # faqat Windows
-python make_icon.py                      # icon.ico / icon.icns yaratadi
+python make_icon.py                      # icon.ico / icon.icns / installer_bg.png
+python make_version_info.py 1.0.5        # app_version.txt / version_info.txt
 
 # Windows  → dist\YangiAlifbo.exe
-pyinstaller --onefile --noconsole --name YangiAlifbo --icon icon.ico --add-data "config.json;." yangi_alifbo.py
+pyinstaller --onefile --noconsole --name YangiAlifbo --icon icon.ico --version-file version_info.txt ^
+  --add-data "config.json;." --add-data "promo.json;." --add-data "app_version.txt;." yangi_alifbo.py
 
-# macOS    → dist/Yangi Alifbo.app
-pip install pyobjc-framework-Cocoa pyobjc-framework-Quartz pyobjc-framework-ApplicationServices
-pyinstaller --onedir --windowed --name "Yangi Alifbo" --icon icon.icns --add-data "config.json:." yangi_alifbo.py
+# macOS    → dist/Yangi Alifbo.app, soʻng .pkg oʻrnatuvchi
+pip install pyobjc-framework-Cocoa pyobjc-framework-Quartz pyobjc-framework-ApplicationServices pyobjc-framework-ServiceManagement
+pyinstaller --onedir --windowed --name "Yangi Alifbo" --icon icon.icns --osx-bundle-identifier uz.yangialifbo.app \
+  --add-data "config.json:." --add-data "promo.json:." --add-data "app_version.txt:." yangi_alifbo.py
+sh installer/macos/build_pkg.sh "dist/Yangi Alifbo.app" 1.0.5 arm64 dist/YangiAlifbo.pkg
 ```
+
+macOS oʻrnatuvchisining sahifalari (Kirish, Read Me, Foydalanish shartlari, Yakun) —
+`installer/macos/resources/*.html`, oʻrnatishdan oldingi/keyingi amallar — `installer/macos/scripts/`.
 
 `--noconsole`/`--windowed` bilan yigʻsangiz, boshqaruv uchun tray belgisi kerak —
 shuning uchun `pystray` va `pillow` ni oldindan oʻrnating. macOS da yigʻilgan `.app` ga
@@ -325,12 +380,16 @@ shuning uchun dastur almashtirishdan oldin fokusdagi maydonda matn oxirigacha be
 bor-yoʻqligini tekshiradi (macOS: Accessibility API, Windows: UI Automation) va bor boʻlsa,
 bitta qoʻshimcha Backspace yuboradi. Aks holda `Shahzod` → `Sşahzod` boʻlib qolardi.
 
-Testlar: `python -m unittest -v test_alifbo_core` (25 ta test).
+Faol dastur roʻyxatda boʻlmasa, tugmalar umuman qayta ishlanmaydi. Faol dastur (`alifbo_apps.py`:
+macOS — `NSWorkspace`, Windows — `GetForegroundWindow` → `.exe` nomi) yarim soniyada bir marta
+yoki sichqoncha bosilganda / Cmd(Alt)+Tab dan keyin aniqlanadi.
+
+Testlar: `python -m unittest -v test_alifbo_core test_alifbo_config`.
 
 ## Cheklovlar
 
 * Dastur "sh" ni koʻrgan zahoti almashtiradi — u oʻzbekcha yoki inglizcha ekanini bilmaydi.
-  Boshqa tilda yozganda oʻchirib qoʻying.
+  Roʻyxatdagi dasturda boshqa tilda yozganda Ctrl+Alt+U bilan oʻchirib qoʻying.
 * Oʻyinlar va baʼzi eski dasturlar Unicode klaviatura kiritishini qabul qilmasligi mumkin.
 * macOS Wayland yoʻq, Linux da esa faqat X11 da ishlaydi.
 * AutoHotkey varianti brauzer manzil satridagi taklifni sezmaydi (`Shahzod` → `Sşahzod`) —
