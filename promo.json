@@ -7,6 +7,12 @@
   ],
   "ads": [
     {
+      "title": "Yangi Alifbo 1.0.7 chiqdi",
+      "text": "Endi yangi versiyalar haqida dasturning oʻzi xabar beradi. Yuklab olib, ustidan oʻrnating – sozlamalar saqlanadi.",
+      "button": "Yuklab olish",
+      "url": "https://github.com/motiondio/yangi-alifbo/releases/latest"
+    },
+    {
       "title": "Yangi Alifbo",
       "text": "Yangi oʻzbek lotin alifbosi 2027-yil 22-apreldan kuchga kiradi. Dasturni doʻstlaringizga ham ulashing!",
       "button": "Yuklab olish sahifasi",
