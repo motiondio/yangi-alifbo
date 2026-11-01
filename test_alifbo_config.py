@@ -202,9 +202,9 @@ class UpdateTests(unittest.TestCase):
         ac.write_runtime(ac.UPDATE_FILE, ac.parse_release(self._api()), self.user)
         info = ac.update_info("1.0.6", self.user, platform="darwin", machine="arm64")
         self.assertEqual(info["version"], "1.0.7")
-        self.assertTrue(info["url"].endswith("/yangi-alifbo-v1.0.7/YangiAlifbo-macos-apple-silicon.pkg"))
+        self.assertEqual(info["url"], f"{self.REL}/latest/download/YangiAlifbo-macos-apple-silicon.pkg")
         info = ac.update_info("1.0.6", self.user, platform="win32", kind="exe")
-        self.assertTrue(info["url"].endswith("/YangiAlifbo-windows-x64.exe"))
+        self.assertEqual(info["url"], f"{self.REL}/latest/download/YangiAlifbo-windows-x64.exe")
         # mos fayl yoʻq (begona havola tashlab yuborilgan) – Release sahifasi
         info = ac.update_info("1.0.6", self.user, platform="win32", kind="portable")
         self.assertEqual(info["url"], info["page"])
@@ -218,6 +218,9 @@ class UpdateTests(unittest.TestCase):
         self.assertFalse(ac.update_due(self.user, now=1000.0 + 3600))
         self.assertTrue(ac.update_due(self.user, now=1000.0 + ac.UPDATE_EVERY_S + 1))
         self.assertTrue(ac.update_due(self.user, now=500.0))  # soat orqaga surilgan
+        # oyna ochilganda – soatiga bir marta
+        self.assertFalse(ac.update_due(self.user, now=1000.0 + 600, every=ac.UPDATE_UI_EVERY_S))
+        self.assertTrue(ac.update_due(self.user, now=1000.0 + 3700, every=ac.UPDATE_UI_EVERY_S))
 
     def test_fetch_falls_back_to_redirect(self):
         calls = []

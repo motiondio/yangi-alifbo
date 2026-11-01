@@ -196,8 +196,9 @@ versiyalardagi "jami" hisobi yangi statistikaga koʻchadi.
 
 ### Yangi versiya
 
-Kuniga bir marta (ilova ochilgandan bir daqiqa keyin) dastur GitHub'dan eng soʻnggi Release
-raqamini soʻraydi — boshqa hech qanday maʼlumot yuborilmaydi. Buni klaviatura kuzatuvchi jarayon
+Kuniga bir marta (ilova ochilgandan bir daqiqa keyin) va panel / sozlamalar ochilganda (soatiga bir
+martadan koʻp emas) dastur GitHub'dan eng soʻnggi Release raqamini soʻraydi — boshqa hech qanday
+maʼlumot yuborilmaydi. *Biz bilan → Dastur haqida → Tekshirish* — istalgan paytda qoʻlda. Buni klaviatura kuzatuvchi jarayon
 emas, qisqa fon jarayoni (`--update-check`) yoki ochiq oyna qiladi. Avval GitHub API, u cheklovga
 tushsa (bitta IP dan soatiga 60 soʻrov) — `releases/latest` yoʻnaltirishi ishlatiladi.
 
@@ -207,7 +208,8 @@ Yangi versiya boʻlsa:
 * panelda yashil xabar, sozlamalarda (*Biz bilan → Dastur haqida*) — yuklab olish tugmasi;
 * Windows'da bir marta tizim xabari (har versiyaga bir marta).
 
-Tugma brauzerda aynan shu kompyuterga mos faylni yuklaydi: Mac — `.pkg` (M yoki Intel),
+Tugma brauzerda aynan shu kompyuterga mos faylni `…/releases/latest/download/` orqali yuklaydi — oxirgi
+tekshiruvdan keyin yana yangi versiya chiqqan boʻlsa ham eng soʻnggisi tushadi: Mac — `.pkg` (M yoki Intel),
 Windows — dastur qanday oʻrnatilgan boʻlsa shunisi (oʻrnatuvchi / bitta `.exe` / portativ `.zip`).
 Ilovaning oʻzi faylni jimgina yuklab oʻrnatmaydi: imzosiz dastur internetdan `.exe` yuklab ishga
 tushirsa, antiviruslar uni shubhali deb belgilaydi. Oʻchirish: *Biz bilan → Yangi versiyani avtomatik

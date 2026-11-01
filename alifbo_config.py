@@ -359,6 +359,7 @@ REPO_URL = "https://github.com/motiondio/yangi-alifbo"
 RELEASES_URL = REPO_URL + "/releases"
 RELEASES_API = "https://api.github.com/repos/motiondio/yangi-alifbo/releases/latest"
 UPDATE_EVERY_S = 20 * 3600   # "kuniga bir marta" – har kuni bir xil soatda ochilsa ham
+UPDATE_UI_EVERY_S = 3600     # panel / sozlamalar ochilganda – soatiga bir martadan koʻp emas
 MAC_ASSETS = {"arm64": "YangiAlifbo-macos-apple-silicon.pkg", "x86_64": "YangiAlifbo-macos-intel.pkg"}
 WIN_ASSETS = {"setup": "YangiAlifbo-Setup-windows-x64.exe", "exe": "YangiAlifbo-windows-x64.exe",
               "portable": "YangiAlifbo-windows-x64-portable.zip"}
@@ -477,10 +478,11 @@ def fetch_update(user_dir: Optional[str] = None, timeout: float = 8.0) -> Option
     return release
 
 
-def update_due(user_dir: Optional[str] = None, now: Optional[float] = None) -> bool:
+def update_due(user_dir: Optional[str] = None, now: Optional[float] = None,
+               every: float = UPDATE_EVERY_S) -> bool:
     checked = read_runtime(UPDATE_FILE, user_dir).get("checked")
     now = time.time() if now is None else now
-    return not isinstance(checked, (int, float)) or not 0 <= now - checked < UPDATE_EVERY_S
+    return not isinstance(checked, (int, float)) or not 0 <= now - checked < every
 
 
 def update_info(current: Optional[str] = None, user_dir: Optional[str] = None,
@@ -495,5 +497,8 @@ def update_info(current: Optional[str] = None, user_dir: Optional[str] = None,
         return None
     page = data["page"] if _gh_url(data.get("page")) else RELEASES_URL + "/latest"
     assets = data.get("assets") if isinstance(data.get("assets"), dict) else {}
-    url = assets.get(release_asset(platform, machine, kind) or "")
-    return {"version": "%d.%d.%d" % latest, "url": url if _gh_url(url) else page, "page": page}
+    name = release_asset(platform, machine, kind)
+    # …/releases/latest/download/<fayl> – tekshiruvdan keyin yana yangi versiya chiqqan boʻlsa ham
+    # eng soʻnggisi yuklanadi (fayl nomi oxirgi tekshiruvdagi Release'da borligi tekshirilgan)
+    url = f"{RELEASES_URL}/latest/download/{name}" if name and _gh_url(assets.get(name)) else page
+    return {"version": "%d.%d.%d" % latest, "url": url, "page": page}

@@ -272,7 +272,9 @@ class UI:
         self._stats_mtime = self._mtime(ac.runtime_path(alifbo_stats.STATS_FILE))
         self._tick = 0
         threading.Thread(target=self._fetch_promo, name="promo", daemon=True).start()
-        if self.cfg.get("check_updates", True) and ac.parse_version(self.version) and ac.update_due():
+        # Oyna ochilganda soatiga bir marta: kun ichida yana yangi versiya chiqqan boʻlishi mumkin
+        if (self.cfg.get("check_updates", True) and ac.parse_version(self.version)
+                and ac.update_due(every=ac.UPDATE_UI_EVERY_S)):
             self.check_update()
         self.root.after(250, self._poll)
 
@@ -1211,51 +1213,46 @@ class SettingsWindow:
         left.pack(side="left", fill="x", expand=True)
         ctk.CTkLabel(left, text=f"{ac.APP_NAME} {ui.version}", font=ui.f_body, anchor="w").pack(anchor="w")
         self.upd_text = ctk.CTkLabel(left, text="", font=ui.f_small, text_color=TEXT_MUTED, anchor="w",
-                                     justify="left", wraplength=400)
+                                     justify="left", wraplength=340)
         self.upd_text.pack(anchor="w")
-        self.upd_btn = ctk.CTkButton(row, text="", width=170, height=32, border_color=CARD_BORDER,
-                                     command=self._on_update_btn)
-        self.upd_btn.pack(side="right")
+        # "Tekshirish" doim bor; yangi versiya boʻlsa – yonida yashil "yuklab olish"
+        self.upd_check = self._outline_button(row, t("btn_check"), ui.check_update, width=110, height=32)
+        self.upd_check.pack(side="right")
+        self.upd_download = self._green_button(row, "", ui.open_update, height=32)
         row = self._row(card, t("upd_auto_row"), t("upd_auto_sub"))
         self._switch(row, bool(ui.cfg.get("check_updates", True)), lambda v: ui.save(check_updates=v))
         row = self._row(card, t("about_alphabet"), t("about_source"))
         self._outline_button(row, "GitHub", lambda: _open_url(ac.RELEASES_URL), width=80).pack(side="right")
 
-    def _on_update_btn(self) -> None:
-        if self.ui.update:
-            self.ui.open_update()
-        else:
-            self.ui.check_update()
-
     def _refresh_update(self) -> None:
         ui = self.ui
         upd, status, data = ui.update, ui.update_status, ui.update_data
+        checking = status == "checking"
         if upd:
             text = t("upd_available", version=upd["version"])
-            button = (t("upd_download", version=upd["version"]), True)
+        elif checking:
+            text = t("upd_checking")
+        elif status == "failed":
+            text = t("upd_failed")
+        elif ac.parse_version(ui.version) is None:
+            text = t("upd_dev") + (t("upd_dev_latest", version=data["version"]) if data.get("version") else "")
+        elif isinstance(data.get("checked"), (int, float)):
+            text = t("upd_latest", when=time.strftime("%d.%m %H:%M", time.localtime(data["checked"])))
         else:
-            if status == "checking":
-                text = t("upd_checking")
-            elif status == "failed":
-                text = t("upd_failed")
-            elif ac.parse_version(ui.version) is None:
-                text = t("upd_dev") + (t("upd_dev_latest", version=data["version"]) if data.get("version") else "")
-            elif isinstance(data.get("checked"), (int, float)):
-                text = t("upd_latest", when=time.strftime("%d.%m %H:%M", time.localtime(data["checked"])))
-            else:
-                text = t("upd_never")
-            button = (t("btn_check"), False)
-        view = (text, button, status == "checking", bool(upd))
+            text = t("upd_never")
+        view = (text, checking, upd and upd["version"])
         if view == self._upd_view:
             return  # har soniyada qayta chizmaymiz
         self._upd_view = view
         self.upd_text.configure(text=text, text_color=TEXT_OK if upd else TEXT_MUTED)
-        green = button[1]
-        self.upd_btn.configure(text=button[0], fg_color=GREEN if green else "transparent",
-                               hover_color=GREEN_HOVER if green else NAV_ACTIVE,
-                               text_color=ON_GREEN if green else TEXT, border_width=0 if green else 1,
-                               font=ui.f_bold if green else ui.f_body,
-                               state="disabled" if status == "checking" else "normal")
+        self.upd_check.configure(text=t("upd_checking") if checking else t("btn_check"),
+                                 state="disabled" if checking else "normal")
+        if upd:
+            self.upd_download.configure(text=t("upd_download", version=upd["version"]))
+            if not self.upd_download.winfo_manager():
+                self.upd_download.pack(side="right", padx=(8, 0), before=self.upd_check)
+        else:
+            self.upd_download.pack_forget()
         self.side_version.configure(
             text=t("sidebar_update", current=ui.version, latest=upd["version"]) if upd
             else t("sidebar_version", version=ui.version),

@@ -294,9 +294,12 @@ STRINGS = {
     "btn_check": ("Tekshirish", "Проверить", "Check"),
     "upd_auto_row": ("Yangi versiyani avtomatik tekshirish", "Автоматически проверять обновления",
                      "Check for updates automatically"),
-    "upd_auto_sub": ("Kuniga bir marta GitHub'dan faqat versiya raqami soʻraladi, boshqa hech narsa yuborilmaydi.",
-                     "Раз в день у GitHub запрашивается только номер версии — больше ничего не отправляется.",
-                     "Once a day only the version number is requested from GitHub – nothing else is sent."),
+    "upd_auto_sub": ("Kuniga bir marta va oyna ochilganda GitHub'dan faqat versiya raqami soʻraladi, "
+                     "boshqa hech narsa yuborilmaydi.",
+                     "Раз в день и при открытии окна у GitHub запрашивается только номер версии — больше "
+                     "ничего не отправляется.",
+                     "Once a day and when this window opens, only the version number is requested from GitHub – "
+                     "nothing else is sent."),
     "about_alphabet": ("Yangi oʻzbek lotin alifbosi (OʻRQ-1184)", "Новый узбекский латинский алфавит (ЗРУ-1184)",
                        "New Uzbek Latin alphabet (Law ZRU-1184)"),
     "about_source": ("Ochiq manba kodi va barcha versiyalar", "Открытый исходный код и все версии",
