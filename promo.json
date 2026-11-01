@@ -1,5 +1,5 @@
 {
-  "_izoh": "Ilovadagi 'Biz bilan' boʻlimi va tray menyusidagi havolalar. Bu faylni GitHub'da tahrirlang – ilova yangi versiyasiz yangilanadi. Faqat https:// havolalar koʻrsatiladi; url boʻsh boʻlsa – yashiriladi. \"ru\" / \"en\" – shu tildagi foydalanuvchilar uchun tarjima (1.0.8 dan).",
+  "_izoh": "Ilovadagi 'Biz bilan' boʻlimi va tray menyusidagi havolalar. Bu faylni GitHub'da tahrirlang – ilova yangi versiyasiz yangilanadi. Faqat https:// havolalar koʻrsatiladi; url boʻsh boʻlsa – yashiriladi. \"ads\" boʻsh – \"Eʼlon\" boʻlimi koʻrinmaydi. \"ru\" / \"en\" – shu tildagi foydalanuvchilar uchun tarjima (1.0.8 dan).",
   "links": [
     {
       "title": "Instagram",
@@ -14,36 +14,5 @@
       "url": "https://t.me/motiondio"
     }
   ],
-  "ads": [
-    {
-      "title": "Yangi Alifbo 1.0.8 chiqdi",
-      "text": "Endi dastur oʻzbek, rus va ingliz tillarida, yangi «Statistika» boʻlimi bilan. Yuklab olib, ustidan oʻrnating – sozlamalar saqlanadi.",
-      "button": "Yuklab olish",
-      "url": "https://github.com/motiondio/yangi-alifbo/releases/latest",
-      "ru": {
-        "title": "Вышла Yangi Alifbo 1.0.8",
-        "text": "Теперь программа на узбекском, русском и английском языках, с новым разделом «Статистика». Скачайте и установите поверх — настройки сохранятся.",
-        "button": "Скачать"
-      },
-      "en": {
-        "title": "Yangi Alifbo 1.0.8 is out",
-        "text": "The app now speaks Uzbek, Russian and English and has a new Statistics section. Download and install it over your current version – your settings are kept.",
-        "button": "Download"
-      }
-    },
-    {
-      "title": "Yangi Alifbo",
-      "text": "Yangi oʻzbek lotin alifbosi 2027-yil 22-apreldan kuchga kiradi. Dasturni doʻstlaringizga ham ulashing!",
-      "button": "Yuklab olish sahifasi",
-      "url": "https://github.com/motiondio/yangi-alifbo/releases/latest",
-      "ru": {
-        "text": "Новый узбекский латинский алфавит вступает в силу с 22 апреля 2027 года. Поделитесь программой с друзьями!",
-        "button": "Страница загрузки"
-      },
-      "en": {
-        "text": "The new Uzbek Latin alphabet takes effect on 22 April 2027. Share the app with your friends!",
-        "button": "Download page"
-      }
-    }
-  ]
+  "ads": []
 }

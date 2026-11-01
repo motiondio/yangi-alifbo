@@ -149,6 +149,20 @@ def _activate(win) -> None:
         pass
 
 
+def _mac_in_dock(show: bool) -> None:
+    """macOS: Tk ilovani Dock va Cmd+Tab ga chiqarib qoʻyadi.  Menyu satri ilovasi u yerda faqat
+    sozlamalar oynasi ochiq paytda koʻrinadi (panel uchun – yoʻq)."""
+    if not IS_MAC:
+        return
+    try:
+        from AppKit import (NSApplication, NSApplicationActivationPolicyAccessory,
+                            NSApplicationActivationPolicyRegular)
+        NSApplication.sharedApplication().setActivationPolicy_(
+            NSApplicationActivationPolicyRegular if show else NSApplicationActivationPolicyAccessory)
+    except Exception:
+        pass
+
+
 def _work_area(win) -> tuple:
     """Ekranning foydalanish mumkin boʻlgan qismi (taskbar / menyu satrisiz): chap, yuqori, oʻng, past."""
     if IS_WIN:
@@ -214,6 +228,7 @@ class UI:
         ctk.set_appearance_mode("system")
         self.root = ctk.CTk()
         self.root.withdraw()
+        _mac_in_dock(False)
         self.autostart = autostart  # (supported, enabled, set) – asosiy moduldan
         self.cfg = ac.load_config()
         i18n.set_language(i18n.resolve(self.cfg))
@@ -727,8 +742,9 @@ class SettingsWindow:
         win.minsize(800, 560)
         win.configure(fg_color=WINDOW_BG)
         win.protocol("WM_DELETE_WINDOW", self.close)
-        if ui.icon_photo is not None:
-            # CustomTkinter Windows'da 200 ms dan keyin oʻz belgisini qoʻyadi – bizniki undan keyin
+        if ui.icon_photo is not None and not IS_MAC:
+            # CustomTkinter Windows'da 200 ms dan keyin oʻz belgisini qoʻyadi – bizniki undan keyin.
+            # macOS da iconphoto Dock belgisini kichik rasm bilan almashtiradi (xira) – ilovaniki qoladi.
             win.after(300, lambda: win.iconphoto(False, ui.icon_photo))
         win.grid_columnconfigure(1, weight=1)
         win.grid_rowconfigure(0, weight=1)
@@ -754,12 +770,14 @@ class SettingsWindow:
     def show(self, page: str | None = None) -> None:
         if page:
             self.select(page)
+        _mac_in_dock(True)  # sozlamalar oynasiga Cmd+Tab bilan qaytish mumkin boʻlsin
         self.win.deiconify()
         _activate(self.win)
 
     def close(self) -> None:
         self.win.destroy()
         self.ui.settings = None
+        _mac_in_dock(False)
 
     # ---- yon panel -----------------------------------------------------------------
     def _build_sidebar(self) -> None:

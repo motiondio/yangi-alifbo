@@ -270,8 +270,8 @@ STRINGS = {
                      "Free app for Windows and Mac"),
 
     # Biz bilan
-    "about_sub": ("Eʼlonlar, yangiliklar va ijtimoiy tarmoqlar.", "Объявления, новости и соцсети.",
-                  "News, announcements and social media."),
+    "about_sub": ("Ijtimoiy tarmoqlar va dastur haqida maʼlumot.", "Соцсети и информация о программе.",
+                  "Social media and information about the app."),
     "sec_ad": ("Eʼlon", "Объявление", "Announcement"),
     "sec_follow": ("Bizni kuzatib boring", "Следите за нами", "Follow us"),
     "links_soon": ("Havolalar tez orada qoʻshiladi.", "Ссылки скоро появятся.", "Links coming soon."),

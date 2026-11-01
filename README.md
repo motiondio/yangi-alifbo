@@ -158,7 +158,7 @@ tahrirlanadi. Roʻyxatdagi dasturda inglizcha yozayotganda (`shop`, `chat`) Ctrl
 * **Dasturlar** — "Faqat roʻyxatdagilarda" (standart) yoki "Hamma dasturlarda"; roʻyxat,
   *Dastur qoʻshish* (hozir ochiq dasturlar), *Standart roʻyxat*.
 * **Statistika** — pastda.
-* **Biz bilan** — eʼlonlar va havolalar (pastdagi `promo.json`), versiya va yangilanishni tekshirish.
+* **Biz bilan** — ijtimoiy tarmoqlar (pastdagi `promo.json`), versiya va yangilanishni tekshirish.
 
 Yorugʻ / qorongʻi rejim tizimga qarab avtomatik tanlanadi. Oynalar alohida jarayonda ishlaydi
 (CustomTkinter) — internetga (faqat `promo.json` va yangi versiya uchun) klaviatura kuzatuvchi jarayon
@@ -235,7 +235,8 @@ keyingi ochilganda yangilanadi, yangi versiya chiqarish shart emas:
 }
 ```
 
-Faqat `https://` havolalar koʻrsatiladi; `url` boʻsh boʻlsa — tugma yashiriladi. Eʼlonlar 3 tagacha.
+Faqat `https://` havolalar koʻrsatiladi; `url` boʻsh boʻlsa — tugma yashiriladi. Eʼlonlar 3 tagacha;
+hozir `"ads": []` — "Eʼlon" boʻlimi koʻrinmaydi (kerak boʻlsa, yozuv qoʻshing — darhol chiqadi).
 Boshqa tillar uchun yozuvga tarjima qoʻshish mumkin — boʻlmasa oʻzbekchasi koʻrsatiladi (yangi alifbo
 tilida — avtomatik oʻgirilib):
 
