@@ -2,5 +2,8 @@ pynput>=1.8
 # ixtiyoriy – tray belgisi uchun:
 pystray>=0.19
 pillow>=9
+# panel va sozlamalar oynasi:
+customtkinter==5.2.2
+certifi
 # Windows: brauzer manzil satri (Edge/Chrome) taklif qoʻshganda toʻgʻri almashtirish uchun:
 comtypes>=1.2; sys_platform == "win32"

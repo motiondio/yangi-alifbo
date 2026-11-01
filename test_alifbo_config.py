@@ -77,6 +77,25 @@ class AppsTests(unittest.TestCase):
         self.assertFalse(ac.app_allowed("telegram.exe", ids))  # standart roʻyxat almashtirildi
 
 
+class PanelHelpersTests(unittest.TestCase):
+    def test_set_app_enabled_adds_and_removes(self):
+        cfg = dict(ac.DEFAULT_CONFIG)
+        apps = ac.set_app_enabled(cfg, "code.exe", "VS Code", True, "win32")
+        self.assertIn({"id": "code.exe", "name": "VS Code"}, apps)
+        self.assertIn("telegram.exe", {a["id"] for a in apps})     # standart roʻyxat saqlanadi
+        cfg["apps"] = apps
+        apps = ac.set_app_enabled(cfg, "TELEGRAM.EXE", None, False, "win32")
+        self.assertNotIn("telegram.exe", {a["id"] for a in apps})  # katta-kichik harf farqi yoʻq
+        cfg["apps"] = ac.set_app_enabled(cfg, "code.exe", None, True, "win32")
+        self.assertEqual([a["id"] for a in cfg["apps"]].count("code.exe"), 1)  # takrorlanmaydi
+
+    def test_runtime_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(ac.read_runtime(ac.STATE_FILE, tmp), {})
+            ac.write_runtime(ac.STATE_FILE, {"enabled": False, "today": 3}, tmp)
+            self.assertEqual(ac.read_runtime(ac.STATE_FILE, tmp), {"enabled": False, "today": 3})
+
+
 class PromoTests(unittest.TestCase):
     def test_parse_filters_bad_entries(self):
         promo = ac.parse_promo({

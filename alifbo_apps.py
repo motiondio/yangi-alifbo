@@ -44,6 +44,18 @@ if sys.platform == "darwin":
         except Exception:
             return None
 
+    def frontmost_app() -> Optional[Tuple[str, str, int]]:
+        """(id, nomi, pid) – panel "hozir oldinda" deb koʻrsatadigan dastur; oʻzimiz – None."""
+        try:
+            from AppKit import NSWorkspace
+            app = NSWorkspace.sharedWorkspace().frontmostApplication()
+            bundle_id = app.bundleIdentifier() if app is not None else None
+            if not bundle_id or str(bundle_id).lower() in OWN_IDS:
+                return None
+            return str(bundle_id), str(app.localizedName() or bundle_id), int(app.processIdentifier())
+        except Exception:
+            return None
+
     def running_apps() -> List[Tuple[str, str]]:
         from AppKit import NSApplicationActivationPolicyRegular, NSWorkspace
         seen = {}
@@ -70,6 +82,7 @@ elif sys.platform.startswith("win"):
     _user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
     _user32.GetWindow.argtypes = [wintypes.HWND, wintypes.UINT]
     _user32.GetWindow.restype = wintypes.HWND
+    _user32.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
     _kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
     _kernel32.OpenProcess.restype = wintypes.HANDLE
     _kernel32.QueryFullProcessImageNameW.argtypes = [
@@ -79,6 +92,12 @@ elif sys.platform.startswith("win"):
     # Oynasi boʻlsa ham, foydalanuvchi matn yozadigan dastur emas
     _SKIP = OWN_IDS | {"applicationframehost.exe", "textinputhost.exe", "shellexperiencehost.exe",
                        "searchhost.exe", "startmenuexperiencehost.exe", "systemsettings.exe"}
+    # Tray belgisi bosilganda oldinga chiqadigan tizim oynalari (taskbar, ish stoli) –
+    # panel ular oʻrniga undan oldingi dasturni koʻrsatishi kerak
+    _SHELL_CLASSES = {"Shell_TrayWnd", "Shell_SecondaryTrayWnd", "NotifyIconOverflowWindow",
+                      "TopLevelWindowForOverflowXamlIsland", "Progman", "WorkerW",
+                      "Windows.UI.Core.CoreWindow", "XamlExplorerHostIslandWindow"}
+    _names: dict = {}
 
     def _pid(hwnd) -> int:
         pid = wintypes.DWORD()
@@ -146,6 +165,26 @@ elif sys.platform.startswith("win"):
         except Exception:
             return None
 
+    def frontmost_app() -> Optional[Tuple[str, str, int]]:
+        """(id, nomi, pid) – panel "hozir oldinda" deb koʻrsatadigan dastur; tizim oynalari – None."""
+        try:
+            hwnd = _user32.GetForegroundWindow()
+            if not hwnd:
+                return None
+            cls = ctypes.create_unicode_buffer(256)
+            _user32.GetClassNameW(hwnd, cls, 256)
+            if cls.value in _SHELL_CLASSES:
+                return None
+            path = _window_exe(hwnd)
+            exe = os.path.basename(path).lower() if path else None
+            if not exe or exe in _SKIP:
+                return None
+            if path not in _names:  # .exe tavsifini oʻqish qimmat – bir marta
+                _names[path] = _file_description(path) or os.path.splitext(os.path.basename(path))[0]
+            return exe, _names[path], _pid(hwnd)
+        except Exception:
+            return None
+
     def running_apps() -> List[Tuple[str, str]]:
         hwnds = []
 
@@ -169,6 +208,9 @@ elif sys.platform.startswith("win"):
 
 else:
     def frontmost_app_id() -> Optional[str]:
+        return None
+
+    def frontmost_app() -> Optional[Tuple[str, str, int]]:
         return None
 
     def running_apps() -> List[Tuple[str, str]]:

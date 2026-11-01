@@ -40,7 +40,7 @@ Tayyor fayllar **[Releases](https://github.com/motiondio/yangi-alifbo/releases/l
 *More info → Run anyway* (dastur imzolanmagan, chunki imzo sertifikati pullik).
 Antivirus (Windows Defender) faylni "virus" deb karantinga olsa — bu notoʻgʻri signal, qarang:
 [Antivirus "virus" desa](#antivirus-virus-desa).
-Soat yonida yashil **ö** belgisi chiqadi: chap tugma — yoqish/oʻchirish, oʻng tugma — menyu.
+Soat yonida yashil **ö** belgisi chiqadi: chap tugma — panel, oʻng tugma — menyu.
 Avtomatik ishga tushishi uchun: `Win+R` → `shell:startup` → shu papkaga `.exe` yorligʻini qoʻying.
 
 **macOS (3 qadam):**
@@ -54,8 +54,9 @@ Avtomatik ishga tushishi uchun: `Win+R` → `shell:startup` → shu papkaga `.ex
    (`.dmg` varianti: ilovani **Applications** papkasiga sudrab, u yerdan oching. Downloads papkasidan
    ishlatmang: macOS bunday ilovani har safar vaqtinchalik papkadan ochadi va ruxsatni saqlab qolmaydi.)
 3. Ilova ikkita ruxsat soʻraydi: *System Settings → Privacy & Security* → **Accessibility** va
-   **Input Monitoring** roʻyxatlarida "Yangi Alifbo" ni yoqing. Ruxsat berilgach dastur oʻzi davom etadi
-   (macOS "Quit & Reopen" desa — bosing). Davom etmasa — menyu satridagi belgidan *Chiqish* qilib, qayta oching.
+   **Input Monitoring** roʻyxatlarida "Yangi Alifbo" ni yoqing. Ruxsat berilgach ilova oʻzini bir marta
+   qayta ochadi — macOS klaviatura kuzatuvini faqat yangi ishga tushgan jarayonga beradi
+   (macOS "Quit & Reopen" desa — bosing).
 
 **Terminal orqali oʻrnatish (eng ishonchli yoʻl, Gatekeeper'ga bogʻliq emas).** `install-mac.sh` ni
 yuklab olib (Releases'da ham bor), Terminal'da ishga tushiring:
@@ -73,7 +74,8 @@ tugmasini bosing (administrator paroli soʻraladi) yoki roʻyxatda "Yangi Alifbo
 oʻchiring, soʻng ilovani qayta oching. Yangilanishlarda ruxsat saqlanib qolishi uchun `.app` ni doimiy
 sertifikat bilan imzolash mumkin — bir martalik sozlash `signing/README.md` da.
 
-Belgi **menyu satrida** (yuqori oʻngda) chiqadi, Dock'da koʻrinmaydi. Chiqish: belgi → *Chiqish*.
+Belgi **menyu satrida** (yuqori oʻngda) chiqadi, Dock'da koʻrinmaydi. Bosilsa — panel, oʻng tugma
+(yoki Control+bosish) — menyu. Chiqish: panel yoki menyu → *Chiqish*.
 Dastur ikkinchi marta ochilsa, "allaqachon ishlamoqda" deb ogohlantiradi (ikki nusxa harfni ikki marta
 almashtirib qoʻyardi). Avtomatik ishga tushishi: *System Settings → General → Login Items* ga qoʻshing.
 Yangi versiyaga oʻtganda macOS eski ruxsatni tanimasligi mumkin — roʻyxatda "Yangi Alifbo" ni oʻchirib (−)
@@ -127,26 +129,38 @@ Ruxsatsiz macOS klaviaturani kuzatishga yoʻl qoʻymaydi.
 | Yoqish / oʻchirish | **Ctrl+Alt+U** (Mac: Control+Option+U) yoki tray belgisi |
 | Almashtirishni bekor qilish | almashgandan keyin **darhol Backspace** — `ş` yana `sh` boʻladi va qayta almashmaydi |
 | `s` va `h` ni alohida qoldirish | `s'h` deb tering: `Is'hoq` → `Ishoq`, `as'hob` → `ashob` |
-| Sozlamalar | tray → **Sozlamalar…** (yoki dasturni qayta ochish) |
+| Panel | tray / menyu satridagi belgini bosish (Windows: chap tugma) |
+| Sozlamalar | panel → **Barcha sozlamalar**, menyu → **Sozlamalar…** yoki dasturni qayta ochish |
 | Chiqish | konsolda Ctrl+C yoki tray → Chiqish |
 
 Dastur standart holatda faqat **tanlangan dasturlarda** ishlaydi (Telegram, WhatsApp, Word, Excel,
 brauzerlar …) — terminal, kod muharriri va oʻyinlarda aralashmaydi. Roʻyxat sozlamalar oynasida
 tahrirlanadi. Roʻyxatdagi dasturda inglizcha yozayotganda (`shop`, `chat`) Ctrl+Alt+U bilan vaqtincha oʻchiring.
 
-### Sozlamalar oynasi
+### Panel va sozlamalar oynasi
 
-Tray belgisi → **Sozlamalar…** uch boʻlimli oynani ochadi:
+**Panel** — belgi bosilganda chiqadigan kichik oyna (macOS: menyu satri ostida, Windows: taskbar ustida):
 
-* **Umumiy** — kompyuter bilan ishga tushish, Backspace bilan qaytarish, `s'h`, tutuq belgisi.
-* **Dasturlar** — qaysi dasturlarda ishlashi: "Faqat roʻyxatdagi dasturlarda" (standart) yoki
-  "Hamma dasturlarda". *Qoʻshish…* hozir ochiq dasturlar roʻyxatini koʻrsatadi.
-* **Biz bilan** — eʼlonlar va Instagram / YouTube / Telegram havolalari (pastdagi `promo.json`).
+* yuqorida — yoqish / oʻchirish (Ctrl+Alt+U bilan bir xil);
+* **Hozir oldinda** — oxirgi ishlatilgan dastur va unda ishlayaptimi; tugma bilan shu dastur
+  roʻyxatga qoʻshiladi yoki olib tashlanadi ("nega bu yerda ishlamayapti?" savoliga javob);
+* bugun va jami nechta harf toʻgʻirlangani (faqat son, kompyuterda saqlanadi);
+* Instagram / YouTube / Telegram, **Barcha sozlamalar**, **Chiqish**. Boshqa joy bosilsa — yopiladi.
 
-Oʻzgarishlar darhol kuchga kiradi: oyna foydalanuvchi papkasidagi `config.json` ga yozadi
-(macOS: `~/Library/Application Support/Yangi Alifbo/`, Windows: `%APPDATA%\Yangi Alifbo\`),
-ishlab turgan dastur esa faylni kuzatib, bir soniya ichida qayta oʻqiydi. Oyna alohida jarayonda
-ishlaydi — internetga (faqat `promo.json` uchun) klaviatura kuzatuvchi jarayon emas, shu oyna ulanadi.
+**Barcha sozlamalar** — yon panelli oyna:
+
+* **Umumiy** — *Sinab koʻring* maydoni (yozganingiz darhol yangi alifboda koʻrinadi), kompyuter bilan
+  ishga tushish, Backspace bilan qaytarish, `s'h`, tutuq belgisi, tezkor tugma.
+* **Dasturlar** — "Faqat roʻyxatdagilarda" (standart) yoki "Hamma dasturlarda"; roʻyxat,
+  *Dastur qoʻshish* (hozir ochiq dasturlar), *Standart roʻyxat*.
+* **Biz bilan** — eʼlonlar va havolalar (pastdagi `promo.json`), versiya.
+
+Yorugʻ / qorongʻi rejim tizimga qarab avtomatik tanlanadi. Oynalar alohida jarayonda ishlaydi
+(CustomTkinter) — internetga (faqat `promo.json` uchun) klaviatura kuzatuvchi jarayon emas, shu jarayon
+ulanadi; tarmoq porti ochilmaydi. Asosiy dastur bilan foydalanuvchi papkasidagi fayllar orqali
+gaplashadi (macOS: `~/Library/Application Support/Yangi Alifbo/`, Windows: `%APPDATA%\Yangi Alifbo\`):
+`config.json` — sozlamalar, `state.json` — holat va hisoblagich, `control.json` — yoqish/oʻchirish va
+chiqish buyrugʻi. Oʻzgarishlar yarim soniya ichida kuchga kiradi.
 
 ### Havolalar va eʼlonlar — `promo.json`
 
@@ -213,19 +227,21 @@ va Mac (Intel) serverlarida yigʻib, Release'ga yuklaydi.
 Qoʻlda (oʻz kompyuteringizda, faqat oʻz tizimingiz uchun):
 
 ```bash
-pip install pyinstaller pynput pystray pillow certifi
+pip install pyinstaller pynput pystray pillow certifi customtkinter==5.2.2
 pip install comtypes                     # faqat Windows
 python make_icon.py                      # icon.ico / icon.icns / installer_bg.png
 python make_version_info.py 1.0.5        # app_version.txt / version_info.txt
 
 # Windows  → dist\YangiAlifbo.exe
 pyinstaller --onefile --noconsole --name YangiAlifbo --icon icon.ico --version-file version_info.txt ^
-  --add-data "config.json;." --add-data "promo.json;." --add-data "app_version.txt;." yangi_alifbo.py
+  --add-data "config.json;." --add-data "promo.json;." --add-data "app_version.txt;." ^
+  --collect-data customtkinter yangi_alifbo.py
 
 # macOS    → dist/Yangi Alifbo.app, soʻng .pkg oʻrnatuvchi
 pip install pyobjc-framework-Cocoa pyobjc-framework-Quartz pyobjc-framework-ApplicationServices pyobjc-framework-ServiceManagement
 pyinstaller --onedir --windowed --name "Yangi Alifbo" --icon icon.icns --osx-bundle-identifier uz.yangialifbo.app \
-  --add-data "config.json:." --add-data "promo.json:." --add-data "app_version.txt:." yangi_alifbo.py
+  --add-data "config.json:." --add-data "promo.json:." --add-data "app_version.txt:." \
+  --collect-data customtkinter yangi_alifbo.py
 sh installer/macos/build_pkg.sh "dist/Yangi Alifbo.app" 1.0.5 arm64 dist/YangiAlifbo.pkg
 ```
 
@@ -382,7 +398,11 @@ bitta qoʻshimcha Backspace yuboradi. Aks holda `Shahzod` → `Sşahzod` boʻlib
 
 Faol dastur roʻyxatda boʻlmasa, tugmalar umuman qayta ishlanmaydi. Faol dastur (`alifbo_apps.py`:
 macOS — `NSWorkspace`, Windows — `GetForegroundWindow` → `.exe` nomi) yarim soniyada bir marta
-yoki sichqoncha bosilganda / Cmd(Alt)+Tab dan keyin aniqlanadi.
+yoki sichqoncha bosilganda / Cmd(Alt)+Tab dan keyin aniqlanadi. Panel uchun oxirgi dastur alohida
+eslab qolinadi: Windows'da tray bosilganda oldinga chiqadigan taskbar hisobga olinmaydi.
+
+macOS'da ruxsat dastur ishlab turganda berilsa, ilova oʻzini bir marta qayta ochadi: macOS klaviatura
+kuzatuvini (Input Monitoring) koʻpincha faqat yangi ishga tushgan jarayonga beradi.
 
 Testlar: `python -m unittest -v test_alifbo_core test_alifbo_config`.
 

@@ -128,6 +128,15 @@ def app_allowed(app_id: Optional[str], ids: Optional[Set[str]]) -> bool:
     return ids is None or app_id is None or app_id.lower() in ids
 
 
+def set_app_enabled(cfg: dict, app_id: str, name: Optional[str], enabled: bool,
+                    platform: str = sys.platform) -> List[Dict[str, str]]:
+    """Dasturni roʻyxatga qoʻshadi yoki olib tashlaydi – yangi roʻyxatni qaytaradi (panel uchun)."""
+    apps = [a for a in config_apps(cfg, platform) if a["id"].lower() != app_id.lower()]
+    if enabled:
+        apps.append({"id": app_id, "name": name or app_id})
+    return apps
+
+
 # ------------------------------------------------------------------- fayllar
 def user_config_dir() -> str:
     if sys.platform.startswith("win"):
@@ -206,6 +215,28 @@ def save_user_settings(changes: dict, user_dir: Optional[str] = None) -> None:
     data = read_user_config(user_dir)
     data.update({k: v for k, v in changes.items() if k in EDITABLE_KEYS})
     _write_json(user_config_path(user_dir), data)
+
+
+# ------------------------------------------- asosiy dastur ↔ oyna aloqasi
+# Tarmoq porti ochilmaydi (klaviatura kuzatuvchi dastur port ochsa, antiviruslarga shubhali):
+#   state.json    asosiy dastur → oyna: yoqilganmi, oxirgi faol dastur, hisoblagich
+#   control.json  oyna → asosiy dastur: yoqish/oʻchirish, chiqish
+#   ui.json       ikkinchi nusxa → ishlab turgan oyna jarayoni: "panelni / sozlamalarni koʻrsat"
+STATE_FILE = "state.json"
+CONTROL_FILE = "control.json"
+UI_REQUEST_FILE = "ui.json"
+
+
+def runtime_path(name: str, user_dir: Optional[str] = None) -> str:
+    return os.path.join(user_dir or user_config_dir(), name)
+
+
+def read_runtime(name: str, user_dir: Optional[str] = None) -> dict:
+    return _read_json(runtime_path(name, user_dir)) or {}
+
+
+def write_runtime(name: str, data: dict, user_dir: Optional[str] = None) -> None:
+    _write_json(runtime_path(name, user_dir), data)
 
 
 def app_version(dirs: Optional[List[str]] = None) -> str:

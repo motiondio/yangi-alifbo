@@ -60,9 +60,10 @@ except Exception as exc:  # pragma: no cover  (ImportError yoki Linux'da DISPLAY
     print(f"pynput yuklanmadi: {exc}\nOʻrnating:  pip install pynput", file=sys.stderr)
     sys.exit(1)
 
-from alifbo_apps import frontmost_app_id
-from alifbo_config import (allowed_ids, app_allowed, app_version, find_bundled, load_config,
-                           load_promo, user_config_path)
+from alifbo_apps import frontmost_app, frontmost_app_id
+from alifbo_config import (CONTROL_FILE, STATE_FILE, UI_REQUEST_FILE, allowed_ids, app_allowed,
+                           app_version, find_bundled, load_config, load_promo, read_runtime,
+                           runtime_path, user_config_path, write_runtime)
 from alifbo_core import TUTUQ, Engine
 
 _MODIFIERS = {
@@ -256,15 +257,16 @@ def _open_privacy_pane(pane: str) -> None:
         pass
 
 
-def macos_wait_permissions(stop_event: threading.Event) -> bool:
-    """Accessibility va Input Monitoring ruxsatini soʻraydi; berilguncha (15 daqiqagacha)
-    kutadi.  Ruxsat berilgach ilovani qayta ochish shart emas – kuzatuvchi shundan
-    keyin yaratiladi."""
+def macos_wait_permissions(stop_event: threading.Event) -> str:
+    """Accessibility va Input Monitoring ruxsatini soʻraydi; berilguncha (15 daqiqagacha) kutadi.
+    Natija: "ok" – ruxsat oldindan bor edi; "granted" – hozir berildi (macOS klaviatura kuzatuvini
+    koʻpincha faqat yangi ishga tushgan jarayonga beradi – ilova oʻzini qayta ochishi kerak);
+    "denied" – berilmadi."""
     if not IS_MAC:
-        return True
+        return "ok"
     ax0, listen0 = _mac_ax_trusted(False), _mac_listen_ok(False)
     if ax0 and listen0:
-        return True
+        return "ok"
     # Berilmagan xizmatlar uchun eski (oldingi versiyadan qolgan) yozuvlarni jimgina tozalaymiz –
     # berilmagan ruxsatni yoʻqotish mumkin emas, lekin xalaqit beruvchi yozuv ketadi.
     _mac_tcc_reset([svc for name, svc in _TCC_SERVICES.items()
@@ -273,13 +275,13 @@ def macos_wait_permissions(stop_event: threading.Event) -> bool:
     ax = _mac_ax_trusted(prompt=True)      # tizimning oʻz soʻrov oynalari
     listen = _mac_listen_ok(prompt=True)
     if ax and listen:
-        return True
+        return "granted"
 
     missing = [n for n, ok in (("Accessibility", ax), ("Input Monitoring", listen)) if not ok]
     msg = (f"{APP_NAME} ishlashi uchun ruxsat kerak: {', '.join(missing)}.\n\n"
            "System Settings → Privacy & Security → Accessibility va Input Monitoring "
-           f"roʻyxatlarida \"{APP_NAME}\" ni yoqing. Ruxsat berilgach dastur oʻzi davom etadi "
-           "(macOS \"Quit & Reopen\" desa – bosing, ilova qayta ochiladi).\n\n"
+           f"roʻyxatlarida \"{APP_NAME}\" ni yoqing. Ruxsat berilgach dastur oʻzi qayta ishga "
+           "tushadi (macOS \"Quit & Reopen\" desa – bosing).\n\n"
            f"Roʻyxatda \"{APP_NAME}\" allaqachon YOQILGAN koʻrinsa-yu, bu oyna baribir chiqaversa – bu "
            "eski versiyadan qolgan yozuv. \"Eski yozuvlarni tozalash\" ni bosing (administrator paroli "
            "soʻraladi) yoki roʻyxatda uni − bilan oʻchirib, qayta qoʻshing.")
@@ -310,8 +312,27 @@ def macos_wait_permissions(stop_event: threading.Event) -> bool:
     while time.monotonic() < deadline and not stop_event.is_set():
         time.sleep(2)
         if _mac_ax_trusted(False) and _mac_listen_ok(False):
-            return True
-    return False
+            return "granted"
+    return "denied"
+
+
+def macos_relaunch() -> bool:
+    """Ruxsat endigina berildi – ilovani qayta ochamiz.  Aks holda klaviatura kuzatuvchisi
+    jimgina hech narsa eshitmay qolishi mumkin va foydalanuvchi uni oʻzi qayta ochishi kerak boʻladi."""
+    global _instance_lock
+    bundle = _mac_bundle_path()
+    if not bundle:
+        return False
+    try:
+        if _instance_lock is not None:
+            _instance_lock.close()  # yangi nusxa "allaqachon ishlamoqda" demasin
+            _instance_lock = None
+        # 1 soniya kutib ochamiz – bu jarayon toʻxtab ulgursin (ikki nusxa harfni ikki marta almashtirardi)
+        subprocess.Popen(["/bin/sh", "-c", 'sleep 1; open -n "$0"', bundle])
+        return True
+    except Exception as exc:
+        print(f"Qayta ishga tushirib boʻlmadi: {exc!r}")
+        return False
 
 
 # -------------------------------------------------------- avtomatik start
@@ -476,6 +497,17 @@ class App:
             backspace_undo=bool(cfg["backspace_undo"]),
         )
         self.enabled = bool(cfg["enabled_on_start"])
+        # Panel uchun: oxirgi faol dastur (id, nomi) va almashtirishlar hisobi (state.json da saqlanadi)
+        self.last_app = None
+        self._state_dirty = True
+        self._stats_lock = threading.Lock()
+        saved = read_runtime(STATE_FILE)
+        self._day = time.strftime("%Y-%m-%d")
+        try:
+            self.today = int(saved.get("today") or 0) if saved.get("date") == self._day else 0
+            self.total = int(saved.get("total") or 0)
+        except (TypeError, ValueError):
+            self.today = self.total = 0
         self.controller = keyboard.Controller()
         self.q: "queue.Queue[tuple]" = queue.Queue()
         self._injecting = threading.Event()
@@ -588,6 +620,17 @@ class App:
             self._suggestion = bool(action.undo) and autocomplete_selected()
         finally:
             self._injecting.clear()
+        if action.undo:  # haqiqiy almashtirish (s'h → sh va tutuq belgisi hisoblanmaydi)
+            with self._stats_lock:
+                self._roll_day()
+                self.today += 1
+                self.total += 1
+                self._state_dirty = True
+
+    def _roll_day(self) -> None:
+        day = time.strftime("%Y-%m-%d")
+        if day != self._day:
+            self._day, self.today = day, 0
 
     def _app_allowed(self) -> bool:
         """Faol dastur roʻyxatdami.  Har tugmada emas – 0.5 s da bir marta, yoki dastur
@@ -615,29 +658,65 @@ class App:
         self.app_ids = allowed_ids(cfg)
         self._app_checked = 0.0
 
-    def _watch_config(self):
-        """Sozlamalar oynasi foydalanuvchi config.json ini oʻzgartirsa – darhol qoʻllaymiz."""
-        path = user_config_path()
+    def _apply_control(self, ctl: dict) -> None:
+        """Panel yoki sozlamalar oynasidan kelgan buyruq (control.json)."""
+        if ctl.get("quit"):
+            print(f"[{APP_NAME}] paneldan chiqish")
+            self.stop()
+        elif isinstance(ctl.get("enabled"), bool) and ctl["enabled"] != self.enabled:
+            self.toggle()
 
-        def mtime():
+    def write_state(self) -> None:
+        """Panel va sozlamalar oynasi uchun holat; hisoblagich ham shu faylda saqlanadi."""
+        with self._stats_lock:
+            self._roll_day()
+            app = {"id": self.last_app[0], "name": self.last_app[1]} if self.last_app else None
+            data = {"enabled": self.enabled, "app": app, "date": self._day, "today": self.today,
+                    "total": self.total, "pid": os.getpid(), "updated": time.time()}
+            self._state_dirty = False
+        try:
+            write_runtime(STATE_FILE, data)
+        except OSError as exc:
+            print(f"state.json yozilmadi: {exc!r}")
+
+    def _housekeeping(self):
+        """Fon ishlari, 0.5 s da bir: oyna oʻzgartirgan config.json va control.json ni qoʻllash,
+        oxirgi faol dasturni eslab qolish, panel uchun state.json ni yozish (kamida 5 s da bir –
+        oyna shundan asosiy dastur ishlayotganini biladi)."""
+        def mtime(path):
             try:
                 return os.stat(path).st_mtime_ns
             except OSError:
                 return None
-        last = mtime()
-        while not self._stop.wait(1.0):
-            now = mtime()
-            if now != last:
-                last = now
-                try:
+        cfg_path, ctl_path = user_config_path(), runtime_path(CONTROL_FILE)
+        last_cfg, last_ctl = mtime(cfg_path), mtime(ctl_path)
+        last_write = 0.0
+        while not self._stop.wait(0.5):
+            try:
+                now = mtime(cfg_path)
+                if now != last_cfg:
+                    last_cfg = now
                     self.apply_config(load_config())
                     print(f"[{APP_NAME}] sozlamalar yangilandi")
-                except Exception as exc:
-                    print(f"Sozlamalarni qoʻllab boʻlmadi: {exc!r}")
+                now = mtime(ctl_path)
+                if now != last_ctl:
+                    last_ctl = now
+                    self._apply_control(read_runtime(CONTROL_FILE))
+                app = frontmost_app()
+                # oʻzimizning oynalar (panel) "oxirgi dastur" boʻlmasin
+                if app is not None and app[2] not in _own_pids() and app[:2] != self.last_app:
+                    self.last_app = app[:2]
+                    self._state_dirty = True
+                if self._state_dirty or time.monotonic() - last_write > 5:
+                    self.write_state()
+                    last_write = time.monotonic()
+            except Exception as exc:  # fon oqimi hech qachon oʻlmasin
+                print(f"Fon ishlarida xatolik: {exc!r}")
 
     # ---- boshqaruv -------------------------------------------------------------
     def toggle(self, *_):
         self.enabled = not self.enabled
+        self._state_dirty = True
         self.engine.reset()
         state = "YOQILDI" if self.enabled else "OʻCHIRILDI"
         print(f"[{APP_NAME}] {state}   (tezkor tugma: {self.cfg['hotkey']})")
@@ -681,7 +760,7 @@ class App:
             self._hotkeys = None
 
         threading.Thread(target=self.worker, name="alifbo-worker", daemon=True).start()
-        threading.Thread(target=self._watch_config, name="alifbo-config", daemon=True).start()
+        threading.Thread(target=self._housekeeping, name="alifbo-housekeeping", daemon=True).start()
         self._kb_listener.start()
         self._mouse_listener.start()
         if self._hotkeys is not None:
@@ -714,9 +793,32 @@ def make_icon_image(enabled: bool):
     return img
 
 
-def open_settings(*_):
-    """Sozlamalar oynasi – alohida jarayon: tray va tkinter bitta asosiy oqimni boʻlisha
-    olmaydi, internetga ham faqat u ulanadi (klaviatura kuzatuvchi jarayon emas)."""
+_ui_proc = None
+
+
+def _own_pids() -> set:
+    pids = {os.getpid()}
+    if _ui_proc is not None:
+        pids.add(_ui_proc.pid)
+    return pids
+
+
+def open_ui(mode: str = "settings") -> None:
+    """Panel ("panel") yoki toʻliq sozlamalar ("settings") – alohida jarayonda: tray va Tk bitta
+    asosiy oqimni boʻlisha olmaydi, internetga ham faqat u ulanadi (klaviatura kuzatuvchi jarayon emas).
+    Oyna jarayoni ishlab tursa, yangisini ochmaymiz (onefile .exe sekin ishga tushadi) – ui.json orqali soʻraymiz."""
+    global _ui_proc
+    if IS_WIN:
+        try:
+            ctypes.windll.user32.AllowSetForegroundWindow(-1)  # ASFW_ANY: panel oldinga chiqa olsin
+        except Exception:
+            pass
+    if _ui_proc is not None and _ui_proc.poll() is None:
+        try:
+            write_runtime(UI_REQUEST_FILE, {"mode": mode, "at": time.time()})
+            return
+        except OSError:
+            pass
     if IS_FROZEN:
         cmd = [sys.executable]
     else:
@@ -725,9 +827,41 @@ def open_settings(*_):
             python = python.replace("python.exe", "pythonw.exe")  # konsol oynasiz
         cmd = [python, os.path.abspath(__file__)]
     try:
-        subprocess.Popen(cmd + ["--settings"], close_fds=True)
+        _ui_proc = subprocess.Popen(cmd + ["--ui", mode], close_fds=True)
     except Exception as exc:
-        print(f"Sozlamalar oynasini ochib boʻlmadi: {exc!r}")
+        print(f"Oynani ochib boʻlmadi: {exc!r}")
+
+
+def _mac_icon_class(pystray):
+    """macOS: chap bosish – panel (menyuning standart bandi), oʻng bosish yoki Control+bosish –
+    menyu.  pystray menyu biriktirilgan belgida chap bosishni ushlamaydi, shuning uchun menyuni
+    belgiga biriktirmay, faqat oʻng bosishda koʻrsatamiz."""
+    try:
+        import AppKit
+
+        class MacIcon(pystray.Icon):
+            def _update_menu(self):
+                super()._update_menu()
+                self._status_item.setMenu_(None)
+                self._status_item.button().sendActionOn_(
+                    AppKit.NSEventMaskLeftMouseUp | AppKit.NSEventMaskRightMouseUp)
+
+            def __call__(self):
+                event = AppKit.NSApp.currentEvent()
+                handle = getattr(self, "_menu_handle", None)
+                right = event is not None and (
+                    event.type() == AppKit.NSEventTypeRightMouseUp
+                    or event.modifierFlags() & AppKit.NSEventModifierFlagControl)
+                if right and handle:
+                    self._status_item.setMenu_(handle[0])
+                    self._status_item.button().performClick_(None)  # menyu yopilguncha kutadi
+                    self._status_item.setMenu_(None)
+                else:
+                    super().__call__()
+        return MacIcon
+    except Exception as exc:
+        print(f"Menyu satri belgisini sozlab boʻlmadi: {exc!r}")
+        return pystray.Icon
 
 
 def _url_opener(url: str):
@@ -754,8 +888,10 @@ def make_tray(app: App):
     links = [pystray.MenuItem(link["title"], _url_opener(link["url"]))
              for link in load_promo()["links"]]
     items = [
-        pystray.MenuItem(label, app.toggle, default=True),
-        pystray.MenuItem("Sozlamalar…", open_settings),
+        # Standart band: Windows'da chap bosish, macOS'da belgini bosish – panel
+        pystray.MenuItem("Panelni ochish", lambda: open_ui("panel"), default=True),
+        pystray.MenuItem(label, app.toggle),
+        pystray.MenuItem("Sozlamalar…", lambda: open_ui("settings")),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Kompyuter bilan ishga tushirish", toggle_autostart,
                          checked=lambda item: autostart_enabled(),
@@ -769,7 +905,8 @@ def make_tray(app: App):
         pystray.MenuItem(f"{APP_NAME} {app_version()}", None, enabled=False),
         pystray.MenuItem("Chiqish", app.stop),
     ]
-    return pystray.Icon("yangi-alifbo", image, f"{APP_NAME}: yoqilgan", pystray.Menu(*items))
+    icon_class = _mac_icon_class(pystray) if IS_MAC else pystray.Icon
+    return icon_class("yangi-alifbo", image, f"{APP_NAME}: yoqilgan", pystray.Menu(*items))
 
 
 # ------------------------------------------------------------------ check
@@ -813,10 +950,15 @@ def run_check() -> int:
             problems.append(f"Windows UI Automation: {exc!r}")
     try:
         import tkinter
-        import alifbo_settings  # noqa: F401
-        print(f"sozlamalar oynasi (tkinter {tkinter.TkVersion}): OK")
+
+        import customtkinter
+
+        import alifbo_ui  # noqa: F401
+        print(f"panel va sozlamalar (tkinter {tkinter.TkVersion}, customtkinter {customtkinter.__version__}): OK")
+        if IS_FROZEN and not os.path.isdir(os.path.join(os.path.dirname(customtkinter.__file__), "assets")):
+            problems.append("customtkinter assets dastur ichida yoʻq (--collect-data customtkinter)")
     except Exception as exc:
-        problems.append(f"sozlamalar oynasi: {exc!r}")
+        problems.append(f"panel va sozlamalar: {exc!r}")
     version = app_version()
     print(f"versiya: {version}")
     if IS_FROZEN:
@@ -856,6 +998,8 @@ def parse_args(argv=None):
     p.add_argument("--autostart", choices=("on", "off"),
                    help="kompyuter bilan avtomatik ishga tushirishni yoqish/oʻchirish va chiqish")
     p.add_argument("--settings", action="store_true", help="sozlamalar oynasini ochish")
+    p.add_argument("--ui", choices=("panel", "settings"),
+                   help="panel yoki sozlamalar oynasi (asosiy dastur oʻzi ochadi)")
     return p.parse_args(argv)
 
 
@@ -868,11 +1012,11 @@ def main(argv=None) -> int:
         print("Avtomatik ishga tushirish:", ("yoqildi" if args.autostart == "on" else "oʻchirildi") if ok else "sozlanmadi")
         return 0 if ok else 1
 
-    if args.settings:
-        if not acquire_single_instance("Settings"):
-            return 0  # oyna allaqachon ochiq
-        from alifbo_settings import run_settings
-        return run_settings(autostart=(autostart_supported, autostart_enabled, set_autostart))
+    if args.ui or args.settings:
+        from alifbo_ui import run_ui
+        return run_ui(args.ui or "settings",
+                      autostart=(autostart_supported, autostart_enabled, set_autostart),
+                      lock=lambda: acquire_single_instance("UI"))
 
     overrides = {}
     if args.hotkey:
@@ -896,7 +1040,7 @@ def main(argv=None) -> int:
 
     if not acquire_single_instance():
         # Dastur allaqachon ishlamoqda – qayta ochilgani sozlamalarni koʻrmoqchi degani
-        open_settings()
+        open_ui("settings")
         return 0
 
     app = App(cfg, overrides)
@@ -913,12 +1057,17 @@ def main(argv=None) -> int:
     def startup(icon=None) -> None:
         if icon is not None:
             icon.visible = True
-        if not macos_wait_permissions(app._stop):
+        permissions = macos_wait_permissions(app._stop)
+        if permissions == "denied":
             if not app._stop.is_set():
                 alert(f"Ruxsat berilmadi, {APP_NAME} ishlay olmaydi.\n\n"
                       "System Settings → Privacy & Security → Accessibility va Input Monitoring "
                       f"da \"{APP_NAME}\" ni yoqib, ilovani qayta oching.")
                 app.stop()
+            return
+        if permissions == "granted" and macos_relaunch():
+            print(f"Ruxsat berildi – {APP_NAME} qayta ishga tushirilmoqda.")
+            app.stop()
             return
         try:
             app.start()

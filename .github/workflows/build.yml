@@ -54,7 +54,7 @@ jobs:
         shell: bash
         run: |
           python -m pip install --upgrade pip
-          pip install pynput pystray pillow certifi
+          pip install pynput pystray pillow certifi customtkinter==5.2.2
           if [ "$RUNNER_OS" != "Windows" ]; then pip install pyinstaller; fi
 
       - name: Kutubxonalar (macOS)
@@ -92,6 +92,7 @@ jobs:
           pyinstaller --noconfirm --clean --onefile --noconsole \
             --name YangiAlifbo --icon icon.ico --version-file version_info.txt \
             --add-data "config.json;." --add-data "promo.json;." --add-data "app_version.txt;." \
+            --collect-data customtkinter \
             --hidden-import pystray._win32 \
             --hidden-import pynput.keyboard._win32 --hidden-import pynput.mouse._win32 \
             --hidden-import comtypes.gen.UIAutomationClient \
@@ -105,6 +106,7 @@ jobs:
           pyinstaller --noconfirm --clean --onedir --noconsole --contents-directory lib \
             --name YangiAlifbo --icon icon.ico --version-file version_info.txt \
             --add-data "config.json;." --add-data "promo.json;." --add-data "app_version.txt;." \
+            --collect-data customtkinter \
             --hidden-import pystray._win32 \
             --hidden-import pynput.keyboard._win32 --hidden-import pynput.mouse._win32 \
             --hidden-import comtypes.gen.UIAutomationClient \
@@ -176,6 +178,7 @@ jobs:
             --name "Yangi Alifbo" --icon icon.icns \
             --osx-bundle-identifier uz.yangialifbo.app \
             --add-data "config.json:." --add-data "promo.json:." --add-data "app_version.txt:." \
+            --collect-data customtkinter \
             --hidden-import pystray._darwin \
             --hidden-import pynput.keyboard._darwin --hidden-import pynput.mouse._darwin \
             yangi_alifbo.py
@@ -369,7 +372,7 @@ jobs:
             | `install-mac.sh` | Mac – Terminal orqali oʻrnatish: `sh ~/Downloads/install-mac.sh` (Gatekeeper'ni chetlab oʻtadi) |
 
             **Windows:** `YangiAlifbo-Setup-windows-x64.exe` ni ishga tushiring. SmartScreen ogohlantirsa: *More info → Run anyway*.
-            Soat yonida yashil "ö" belgisi paydo boʻladi.
+            Soat yonida yashil "ö" belgisi paydo boʻladi: chap tugma – panel, oʻng tugma – menyu.
             Antivirus faylni "virus" deb karantinga olsa – bu notoʻgʻri signal: [qoʻllanma](https://github.com/motiondio/yangi-alifbo#antivirus-virus-desa).
 
             **macOS (3 qadam):**
@@ -379,12 +382,12 @@ jobs:
             2. Oʻrnatuvchida *Continue → Agree → Install* (Mac paroli soʻraladi). Ilova oʻzi ochiladi.
                (`.dmg` varianti: ilovani **Applications** ga sudrab, u yerdan oching.)
             3. Ilova ikkita ruxsat soʻraydi – *System Settings → Privacy & Security* → **Accessibility** va
-               **Input Monitoring** roʻyxatlarida "Yangi Alifbo" ni yoqing. Ruxsat berilgach dastur oʻzi davom etadi;
-               davom etmasa, menyu satridagi belgidan *Chiqish* qilib qayta oching.
+               **Input Monitoring** roʻyxatlarida "Yangi Alifbo" ni yoqing. Ruxsat berilgach ilova oʻzini bir marta
+               qayta ochadi va ishlay boshlaydi.
                Ruxsat qayta-qayta soʻralaversa – ilova oynasidagi **Eski yozuvlarni tozalash** tugmasini bosing
                (yoki roʻyxatda "Yangi Alifbo" ni − bilan oʻchirib qayta qoʻshing): bu eski versiyadan qolgan yozuv.
 
-            Belgi **menyu satrida** (yuqori oʻngda) chiqadi, Dock'da koʻrinmaydi. Chiqish: belgi → *Chiqish*.
+            Belgi **menyu satrida** (yuqori oʻngda) chiqadi, Dock'da koʻrinmaydi: bosing – panel, oʻng tugma – menyu.
             Yoqish/oʻchirish: **Ctrl+Alt+U** (Mac: Control+Option+U).
             Yangi versiyaga oʻtganda ruxsatni bir marta qayta berish kerak boʻladi (ilova eski yozuvni oʻzi tozalaydi).
             Bunday boʻlmasligi uchun doimiy imzo sozlash: `signing/README.md`.
