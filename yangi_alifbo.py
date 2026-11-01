@@ -67,6 +67,10 @@ from alifbo_config import (CONTROL_FILE, STATE_FILE, UI_REQUEST_FILE, UPDATE_FIL
                            update_info, user_config_path, write_runtime)
 from alifbo_core import TUTUQ, Engine
 
+import alifbo_i18n as i18n
+import alifbo_stats
+from alifbo_i18n import t
+
 _MODIFIERS = {
     Key.ctrl, Key.ctrl_l, Key.ctrl_r,
     Key.alt, Key.alt_l, Key.alt_r, Key.alt_gr,
@@ -171,12 +175,10 @@ def macos_self_install() -> bool:
         subprocess.run(["xattr", "-cr", bundle], check=False, capture_output=True)
         return False
 
-    where = ("macOS'ning vaqtinchalik xavfsizlik papkasidan" if translocated
-             else "Applications papkasidan tashqaridan")
-    msg = (f"{APP_NAME} hozir {where} ishga tushdi. Bu holatda macOS siz bergan "
-           "ruxsatlarni saqlab qolmaydi va dastur har safar qayta ruxsat soʻrayveradi.\n\n"
-           "Ilovani Applications papkasiga oʻrnatib, u yerdan ishga tushiraylikmi?")
-    if alert(msg, buttons=("Keyinroq", "Oʻrnatish"), default="Oʻrnatish", icon="note") != "Oʻrnatish":
+    where = t("where_translocated" if translocated else "where_outside")
+    install = t("btn_install")
+    if alert(t("self_install", app=APP_NAME, where=where), buttons=(t("btn_later"), install),
+             default=install, icon="note") != install:
         return False
 
     name = os.path.basename(bundle)
@@ -197,8 +199,7 @@ def macos_self_install() -> bool:
             return True
         except Exception as exc:
             last_error = exc
-    alert(f"Applications papkasiga koʻchirib boʻlmadi: {last_error}\n\n"
-          "Ilovani Finder orqali qoʻlda Applications papkasiga koʻchiring va u yerdan oching.")
+    alert(t("self_install_failed", error=last_error))
     return False
 
 
@@ -278,30 +279,21 @@ def macos_wait_permissions(stop_event: threading.Event) -> str:
     if ax and listen:
         return "granted"
 
-    missing = [n for n, ok in (("Accessibility", ax), ("Input Monitoring", listen)) if not ok]
-    msg = (f"{APP_NAME} ishlashi uchun ruxsat kerak: {', '.join(missing)}.\n\n"
-           "System Settings → Privacy & Security → Accessibility va Input Monitoring "
-           f"roʻyxatlarida \"{APP_NAME}\" ni yoqing. Ruxsat berilgach dastur oʻzi qayta ishga "
-           "tushadi (macOS \"Quit & Reopen\" desa – bosing).\n\n"
-           f"Roʻyxatda \"{APP_NAME}\" allaqachon YOQILGAN koʻrinsa-yu, bu oyna baribir chiqaversa – bu "
-           "eski versiyadan qolgan yozuv. \"Eski yozuvlarni tozalash\" ni bosing (administrator paroli "
-           "soʻraladi) yoki roʻyxatda uni − bilan oʻchirib, qayta qoʻshing.")
+    missing = [t(key) for key, ok in (("perm_accessibility", ax), ("perm_input", listen)) if not ok]
+    reset, open_settings = t("btn_reset_entries"), t("btn_open_settings")
+    msg = t("perm_needed", app=APP_NAME, missing=", ".join(missing), path=t("perm_path"), reset=reset)
     pane = "Privacy_Accessibility" if not ax else "Privacy_ListenEvent"
 
     def ask() -> None:
-        choice = alert(msg, buttons=("Eski yozuvlarni tozalash", "Sozlamalarni ochish"),
-                       default="Sozlamalarni ochish", icon="note")
-        if choice == "Eski yozuvlarni tozalash":
+        choice = alert(msg, buttons=(reset, open_settings), default=open_settings, icon="note")
+        if choice == reset:
             if _mac_tcc_reset(list(_TCC_SERVICES.values()), admin=True):
                 _mac_ax_trusted(True)
                 _mac_listen_ok(True)
-                alert("Eski yozuvlar tozalandi. Endi System Settings → Privacy & Security → "
-                      f"Accessibility va Input Monitoring da \"{APP_NAME}\" ni qayta yoqing.",
-                      buttons=("Sozlamalarni ochish",), icon="note")
+                alert(t("perm_reset_ok", app=APP_NAME, path=t("perm_path")),
+                      buttons=(open_settings,), icon="note")
             else:
-                alert("Tozalab boʻlmadi. Qoʻlda: System Settings → Privacy & Security → Accessibility "
-                      f"va Input Monitoring roʻyxatlarida \"{APP_NAME}\" ni belgilab − bilan oʻchiring, "
-                      "soʻng ilovani qayta oching.", buttons=("Sozlamalarni ochish",))
+                alert(t("perm_reset_fail", app=APP_NAME, path=t("perm_path")), buttons=(open_settings,))
             pane_now = "Privacy_Accessibility"
         else:
             pane_now = pane
@@ -504,11 +496,18 @@ class App:
         self._stats_lock = threading.Lock()
         saved = read_runtime(STATE_FILE)
         self._day = time.strftime("%Y-%m-%d")
-        try:
-            self.today = int(saved.get("today") or 0) if saved.get("date") == self._day else 0
-            self.total = int(saved.get("total") or 0)
-        except (TypeError, ValueError):
-            self.today = self.total = 0
+        self.stats = alifbo_stats.load()
+        if self.stats.empty():
+            # Oldingi versiyalarda faqat "bugun" va "jami" hisoblangan (state.json) – yoʻqolmasin
+            try:
+                total = int(saved.get("total") or 0)
+                today = int(saved.get("today") or 0) if saved.get("date") == self._day else 0
+            except (TypeError, ValueError):
+                total = today = 0
+            self.stats.migrate(total, today, self._day)
+        self._stats_dirty = False
+        self._milestone = self.stats.milestone()
+        self._milestone_at = saved.get("milestone_at") if saved.get("milestone") == self._milestone else None
         # Yangi versiya: update.json dan (internetga fon jarayoni chiqadi, bu jarayon emas)
         self.version = app_version()
         self.update = None                # {"version", "url", "page"} – oʻrnatilganidan yangisi
@@ -629,16 +628,22 @@ class App:
         finally:
             self._injecting.clear()
         if action.undo:  # haqiqiy almashtirish (s'h → sh va tutuq belgisi hisoblanmaydi)
-            with self._stats_lock:
-                self._roll_day()
-                self.today += 1
-                self.total += 1
-                self._state_dirty = True
+            self._count(action.insert)
+
+    def _count(self, inserted: str) -> None:
+        """Statistika: kun, harf va dastur (faqat son – matn saqlanmaydi)."""
+        app = self.last_app[1] if self.last_app else None
+        with self._stats_lock:
+            self._roll_day()
+            self.stats.add(self._day, alifbo_stats.letter_of(inserted), app)
+            self._stats_dirty = self._state_dirty = True
+            milestone = self.stats.milestone()
+            if milestone > self._milestone:
+                self._milestone, self._milestone_at = milestone, time.time()
+                self._notify(t("notify_milestone", n=i18n.fmt_num(milestone)))
 
     def _roll_day(self) -> None:
-        day = time.strftime("%Y-%m-%d")
-        if day != self._day:
-            self._day, self.today = day, 0
+        self._day = time.strftime("%Y-%m-%d")
 
     def _app_allowed(self) -> bool:
         """Faol dastur roʻyxatdami.  Har tugmada emas – 0.5 s da bir marta, yoki dastur
@@ -665,12 +670,21 @@ class App:
         self.engine.backspace_undo = bool(cfg["backspace_undo"])
         self.app_ids = allowed_ids(cfg)
         self._app_checked = 0.0
+        if i18n.resolve(cfg) != i18n.language():
+            i18n.set_language(i18n.resolve(cfg))
+            self._update_tray()
+            self._refresh_tray_menu()
 
     def _apply_control(self, ctl: dict) -> None:
         """Panel yoki sozlamalar oynasidan kelgan buyruq (control.json)."""
         if ctl.get("quit"):
             print(f"[{APP_NAME}] paneldan chiqish")
             self.stop()
+        elif ctl.get("reset_stats"):
+            with self._stats_lock:
+                self.stats.reset()
+                self._milestone, self._milestone_at = 0, None
+                self._stats_dirty = self._state_dirty = True
         elif isinstance(ctl.get("enabled"), bool) and ctl["enabled"] != self.enabled:
             self.toggle()
 
@@ -679,14 +693,26 @@ class App:
         with self._stats_lock:
             self._roll_day()
             app = {"id": self.last_app[0], "name": self.last_app[1]} if self.last_app else None
-            data = {"enabled": self.enabled, "app": app, "date": self._day, "today": self.today,
-                    "total": self.total, "update_notified": self._update_notified,
-                    "pid": os.getpid(), "updated": time.time()}
+            data = {"enabled": self.enabled, "app": app, "date": self._day,
+                    "today": self.stats.day_count(self._day), "total": self.stats.total(),
+                    "milestone": self._milestone, "milestone_at": self._milestone_at,
+                    "update_notified": self._update_notified, "pid": os.getpid(), "updated": time.time()}
             self._state_dirty = False
         try:
             write_runtime(STATE_FILE, data)
         except OSError as exc:
             print(f"state.json yozilmadi: {exc!r}")
+
+    def save_stats(self) -> None:
+        with self._stats_lock:
+            if not self._stats_dirty:
+                return
+            data = alifbo_stats.Stats(self.stats.to_dict())  # nusxa – yozish lock tashqarisida
+            self._stats_dirty = False
+        try:
+            alifbo_stats.save(data)
+        except OSError as exc:
+            print(f"stats.json yozilmadi: {exc!r}")
 
     def _housekeeping(self):
         """Fon ishlari, 0.5 s da bir: oyna oʻzgartirgan config.json va control.json ni qoʻllash,
@@ -700,7 +726,7 @@ class App:
         cfg_path, ctl_path, upd_path = user_config_path(), runtime_path(CONTROL_FILE), runtime_path(UPDATE_FILE)
         last_cfg, last_ctl = mtime(cfg_path), mtime(ctl_path)
         last_upd = -1  # birinchi aylanishda avvalgi tekshiruv natijasini ham oʻqiymiz
-        last_write = 0.0
+        last_write = last_stats = 0.0
         while not self._stop.wait(0.5):
             try:
                 now = mtime(cfg_path)
@@ -725,6 +751,9 @@ class App:
                 if self._state_dirty or time.monotonic() - last_write > 5:
                     self.write_state()
                     last_write = time.monotonic()
+                if self._stats_dirty and time.monotonic() - last_stats > 2:  # har harfda emas
+                    self.save_stats()
+                    last_stats = time.monotonic()
             except Exception as exc:  # fon oqimi hech qachon oʻlmasin
                 print(f"Fon ishlarida xatolik: {exc!r}")
 
@@ -741,13 +770,15 @@ class App:
             self._update_notified = info["version"]
             self._state_dirty = True
             print(f"[{APP_NAME}] yangi versiya: {info['version']}")
-            try:
-                # macOS da pystray xabari "Script Editor" nomidan chiqadi – u yerda belgi nuqtasi yetarli
-                if IS_WIN and self.tray is not None:
-                    self.tray.notify(f"{APP_NAME} {info['version']} chiqdi. Yangilash uchun belgini bosing.",
-                                     APP_NAME)
-            except Exception:
-                pass
+            self._notify(t("notify_update", app=APP_NAME, version=info["version"]))
+
+    def _notify(self, message: str) -> None:
+        # macOS da pystray xabari "Script Editor" nomidan chiqadi – u yerda panel va belgi yetarli
+        try:
+            if IS_WIN and self.tray is not None:
+                self.tray.notify(message, APP_NAME)
+        except Exception:
+            pass
 
     def _maybe_check_updates(self) -> None:
         """Kuniga bir marta: alohida fon jarayoni GitHub'dan versiya raqamini soʻraydi."""
@@ -796,13 +827,14 @@ class App:
             return
         try:
             self.tray.icon = make_icon_image(self.enabled, badge=self.update is not None)
-            self.tray.title = (f"{APP_NAME}: {'yoqilgan' if self.enabled else 'oʻchirilgan'}"
-                               + (f" · {self.update['version']} chiqdi" if self.update else ""))
+            self.tray.title = (t("tray_title_on" if self.enabled else "tray_title_off", app=APP_NAME)
+                               + (t("tray_title_update", version=self.update["version"]) if self.update else ""))
         except Exception:
             pass
 
     def stop(self, *_):
         self._stop.set()
+        self.save_stats()
         for lst in (self._hotkeys, self._mouse_listener, self._kb_listener):
             try:
                 if lst is not None:
@@ -956,36 +988,36 @@ def make_tray(app: App):
         return None
 
     def label(_item):
-        return "Oʻchirish" if app.enabled else "Yoqish"
+        return t("tray_turn_off" if app.enabled else "tray_turn_on")
 
     def toggle_autostart(icon=None, item=None):
         set_autostart(not autostart_enabled())
 
     links = [pystray.MenuItem(link["title"], _url_opener(link["url"]))
              for link in load_promo()["links"]]
+    # Matnlar funksiya: til almashganda update_menu() ularni qayta oʻqiydi
     items = [
-        pystray.MenuItem(lambda item: f"Yangi versiya {app.update['version']} – yuklab olish"
-                         if app.update else "Yangi versiya", app.open_update,
-                         visible=lambda item: app.update is not None),
+        pystray.MenuItem(lambda item: t("tray_update", version=app.update["version"]) if app.update else "",
+                         app.open_update, visible=lambda item: app.update is not None),
         # Standart band: Windows'da chap bosish, macOS'da belgini bosish – panel
-        pystray.MenuItem("Panelni ochish", lambda: open_ui("panel"), default=True),
+        pystray.MenuItem(lambda item: t("tray_open_panel"), lambda: open_ui("panel"), default=True),
         pystray.MenuItem(label, app.toggle),
-        pystray.MenuItem("Sozlamalar…", lambda: open_ui("settings")),
+        pystray.MenuItem(lambda item: t("tray_settings"), lambda: open_ui("settings")),
         pystray.Menu.SEPARATOR,
-        pystray.MenuItem("Kompyuter bilan ishga tushirish", toggle_autostart,
+        pystray.MenuItem(lambda item: t("tray_autostart"), toggle_autostart,
                          checked=lambda item: autostart_enabled(),
                          visible=lambda item: autostart_supported()),
     ]
     if links:
-        items.append(pystray.MenuItem("Biz bilan", pystray.Menu(*links)))
+        items.append(pystray.MenuItem(lambda item: t("tray_links"), pystray.Menu(*links)))
     items += [
         pystray.Menu.SEPARATOR,
-        pystray.MenuItem(f"Tezkor tugma: {app.cfg['hotkey']}", None, enabled=False),
+        pystray.MenuItem(lambda item: t("tray_hotkey", hotkey=app.cfg["hotkey"]), None, enabled=False),
         pystray.MenuItem(f"{APP_NAME} {app_version()}", None, enabled=False),
-        pystray.MenuItem("Chiqish", app.stop),
+        pystray.MenuItem(lambda item: t("btn_quit"), app.stop),
     ]
     icon_class = _mac_icon_class(pystray) if IS_MAC else pystray.Icon
-    return icon_class("yangi-alifbo", image, f"{APP_NAME}: yoqilgan", pystray.Menu(*items))
+    return icon_class("yangi-alifbo", image, t("tray_title_on", app=APP_NAME), pystray.Menu(*items))
 
 
 # ------------------------------------------------------------------ check
@@ -1038,6 +1070,15 @@ def run_check() -> int:
             problems.append("customtkinter assets dastur ichida yoʻq (--collect-data customtkinter)")
     except Exception as exc:
         problems.append(f"panel va sozlamalar: {exc!r}")
+    try:
+        for lang in i18n.LANGS:
+            i18n.set_language(lang)
+            assert t("tray_open_panel") != "tray_open_panel"
+        i18n.set_language(i18n.DEFAULT)
+        alifbo_stats.Stats().add("2026-01-01", "ş", "Telegram")
+        print(f"tillar ({', '.join(i18n.LANGS)}; tizim tili: {i18n.system_language()}) va statistika: OK")
+    except Exception as exc:
+        problems.append(f"tillar/statistika: {exc!r}")
     version = app_version()
     print(f"versiya: {version}")
     if IS_FROZEN:
@@ -1116,6 +1157,7 @@ def main(argv=None) -> int:
         overrides["tray"] = False
     cfg = load_config()
     cfg.update(overrides)
+    i18n.set_language(i18n.resolve(cfg))
 
     # macOS: Downloads/zip ichidan ochilgan boʻlsa – Applications ga oʻrnatib, qayta ochamiz
     if macos_self_install():
@@ -1130,7 +1172,7 @@ def main(argv=None) -> int:
     tray = make_tray(app) if cfg.get("tray", True) else None
     app.tray = tray
     if tray is None and IS_FROZEN and IS_MAC:
-        alert("Menyu satri belgisini yaratib boʻlmadi, shuning uchun dastur ishga tushmadi.")
+        alert(t("tray_failed"))
         return 1
 
     print(f"{APP_NAME} ishga tushmoqda.")
@@ -1143,9 +1185,7 @@ def main(argv=None) -> int:
         permissions = macos_wait_permissions(app._stop)
         if permissions == "denied":
             if not app._stop.is_set():
-                alert(f"Ruxsat berilmadi, {APP_NAME} ishlay olmaydi.\n\n"
-                      "System Settings → Privacy & Security → Accessibility va Input Monitoring "
-                      f"da \"{APP_NAME}\" ni yoqib, ilovani qayta oching.")
+                alert(t("perm_denied", app=APP_NAME, path=t("perm_path")))
                 app.stop()
             return
         if permissions == "granted" and macos_relaunch():
@@ -1159,18 +1199,15 @@ def main(argv=None) -> int:
             ok = False
             print(f"Klaviatura kuzatuvchisini ishga tushirib boʻlmadi: {exc!r}")
         if not ok:
-            alert(f"Klaviatura kuzatuvchisi ishga tushmadi.\n\n"
-                  + ("Ruxsat endigina berilgan boʻlsa, ilovani yopib qayta oching. "
-                     "System Settings → Privacy & Security → Accessibility va Input Monitoring "
-                     f"da \"{APP_NAME}\" yoqilganini tekshiring." if IS_MAC
-                     else "Dasturni qayta ishga tushirib koʻring."))
+            alert(t("listener_failed") + "\n\n"
+                  + (t("listener_hint_mac", app=APP_NAME, path=t("perm_path")) if IS_MAC
+                     else t("listener_hint_win")))
             app.stop()
             return
         app._update_tray()
         print(f"{APP_NAME} ishga tushdi.")
         if IS_FROZEN and IS_WIN and tray is None:
-            alert(f"{APP_NAME} ishlamoqda.\nYoqish/oʻchirish: {cfg['hotkey']}\n"
-                  "Toʻxtatish: Task Manager orqali.", icon="note")
+            alert(t("running_no_tray", app=APP_NAME, hotkey=cfg["hotkey"]), icon="note")
 
     try:
         if tray is not None:

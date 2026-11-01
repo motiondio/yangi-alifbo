@@ -28,27 +28,57 @@ WizardStyle=modern
 CloseApplications=yes
 RestartApplications=no
 
+; Tanlangan til dasturga ham oʻtadi (pastda [Registry]: Software\Yangi Alifbo\Language);
+; keyin uni Sozlamalar → Umumiy → Til da oʻzgartirish mumkin.  Tizim tiliga mosi avtomatik belgilanadi.
 [Languages]
-Name: "en"; MessagesFile: "compiler:Default.isl"
+Name: "uz"; MessagesFile: "compiler:Default.isl,Uzbek.isl"
 Name: "ru"; MessagesFile: "compiler:Languages\Russian.isl"
+Name: "en"; MessagesFile: "compiler:Default.isl"
+
+[Messages]
+uz.SelectLanguageLabel=Oʻrnatish tilini tanlang. Dastur ham shu tilda ochiladi – keyin Sozlamalarda oʻzgartirish mumkin.
+ru.SelectLanguageLabel=Выберите язык установки. Программа тоже будет на этом языке — его можно сменить в настройках.
+en.SelectLanguageLabel=Select the language to use during the installation. The app will use it too – you can change it later in Settings.
+
+[CustomMessages]
+uz.TaskAutostart=Kompyuter yoqilganda avtomatik ishga tushsin (tavsiya etiladi)
+ru.TaskAutostart=Запускать вместе с Windows (рекомендуется)
+en.TaskAutostart=Start with Windows (recommended)
+uz.TaskDesktop=Ish stolida yorliq yaratish
+ru.TaskDesktop=Создать значок на рабочем столе
+en.TaskDesktop=Create a desktop shortcut
+uz.TaskGroup=Qoʻshimcha:
+ru.TaskGroup=Дополнительно:
+en.TaskGroup=Additional:
+uz.RunNow=Yangi Alifbo ni hozir ishga tushirish
+ru.RunNow=Запустить Yangi Alifbo сейчас
+en.RunNow=Launch Yangi Alifbo now
+uz.UninstallIcon=Yangi Alifbo – oʻchirish
+ru.UninstallIcon=Удалить Yangi Alifbo
+en.UninstallIcon=Uninstall Yangi Alifbo
 
 [Tasks]
-Name: "autostart"; Description: "Windows bilan birga avtomatik ishga tushirish (tavsiya etiladi)"; GroupDescription: "Qoʻshimcha:"
-Name: "desktopicon"; Description: "Ish stolida yorliq yaratish"; GroupDescription: "Qoʻshimcha:"; Flags: unchecked
+Name: "autostart"; Description: "{cm:TaskAutostart}"; GroupDescription: "{cm:TaskGroup}"
+Name: "desktopicon"; Description: "{cm:TaskDesktop}"; GroupDescription: "{cm:TaskGroup}"; Flags: unchecked
 
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
+[InstallDelete]
+; oldingi versiyalar oʻchirish yorligʻini doim oʻzbekcha nom bilan yaratgan
+Type: files; Name: "{group}\Yangi Alifbo – oʻchirish.lnk"
+
 [Icons]
 Name: "{group}\Yangi Alifbo"; Filename: "{app}\YangiAlifbo.exe"
-Name: "{group}\Yangi Alifbo – oʻchirish"; Filename: "{uninstallexe}"
+Name: "{group}\{cm:UninstallIcon}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\Yangi Alifbo"; Filename: "{app}\YangiAlifbo.exe"; Tasks: desktopicon
 
 [Registry]
+Root: HKCU; Subkey: "Software\Yangi Alifbo"; ValueType: string; ValueName: "Language"; ValueData: "{language}"; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "YangiAlifbo"; ValueData: """{app}\YangiAlifbo.exe"""; Flags: uninsdeletevalue; Tasks: autostart
 
 [Run]
-Filename: "{app}\YangiAlifbo.exe"; Description: "Yangi Alifbo ni hozir ishga tushirish"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\YangiAlifbo.exe"; Description: "{cm:RunNow}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
 Filename: "{cmd}"; Parameters: "/C taskkill /F /IM YangiAlifbo.exe"; Flags: runhidden; RunOnceId: "KillYangiAlifbo"

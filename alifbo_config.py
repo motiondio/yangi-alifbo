@@ -41,11 +41,13 @@ DEFAULT_CONFIG = {
     "apps": None,
     # Kuniga bir marta GitHub'dan eng soʻnggi versiya raqamini soʻrash
     "check_updates": True,
+    # Interfeys tili: "uz", "uz-new" (yangi alifbo), "ru", "en";  null – avtomatik (alifbo_i18n.resolve)
+    "language": None,
 }
 
 # Sozlamalar oynasi oʻzgartira oladigan kalitlar
 EDITABLE_KEYS = ("enabled_on_start", "backspace_undo", "strip_sh_apostrophe",
-                 "tutuq_belgisi", "apps_mode", "apps", "check_updates")
+                 "tutuq_belgisi", "apps_mode", "apps", "check_updates", "language")
 
 # ---------------------------------------------------------------- dasturlar
 # Identifikator: macOS – bundle id, Windows – .exe nomi (kichik harflarda).
@@ -228,6 +230,7 @@ def save_user_settings(changes: dict, user_dir: Optional[str] = None) -> None:
 #   control.json  oyna → asosiy dastur: yoqish/oʻchirish, chiqish
 #   ui.json       ikkinchi nusxa → ishlab turgan oyna jarayoni: "panelni / sozlamalarni koʻrsat"
 #   update.json   oyna yoki fon tekshiruvi → hammaga: GitHub'dagi eng soʻnggi versiya
+#   stats.json    asosiy dastur → oyna: statistika (alifbo_stats)
 STATE_FILE = "state.json"
 CONTROL_FILE = "control.json"
 UI_REQUEST_FILE = "ui.json"
@@ -277,15 +280,25 @@ def _items(value) -> list:
     return value if isinstance(value, list) else []
 
 
-def parse_promo(data) -> dict:
-    """promo.json ni tekshiradi: notoʻgʻri yoki boʻsh havolali yozuvlar tashlab yuboriladi."""
+def _localized(item, lang: Optional[str]):
+    """Yozuvning shu tildagi varianti: {"title": "…", "ru": {"title": "…"}, "en": {…}}."""
+    if isinstance(item, dict) and lang and isinstance(item.get(lang), dict):
+        return {**item, **item[lang]}
+    return item
+
+
+def parse_promo(data, lang: Optional[str] = None) -> dict:
+    """promo.json ni tekshiradi: notoʻgʻri yoki boʻsh havolali yozuvlar tashlab yuboriladi.
+    lang ("ru", "en") – yozuvda shu tilga tarjima boʻlsa, oʻshani oladi."""
     out = {"links": [], "ads": []}
     if not isinstance(data, dict):
         return out
     for item in _items(data.get("links")):
+        item = _localized(item, lang)
         if isinstance(item, dict) and _url_ok(item.get("url")) and _text(item.get("title"), 40):
             out["links"].append({"title": _text(item["title"], 40), "url": item["url"]})
     for item in _items(data.get("ads")):
+        item = _localized(item, lang)
         if not isinstance(item, dict) or not _text(item.get("title"), 80):
             continue
         ad = {"title": _text(item["title"], 80), "text": _text(item.get("text"), 400),
@@ -298,12 +311,13 @@ def parse_promo(data) -> dict:
     return out
 
 
-def load_promo(user_dir: Optional[str] = None, dirs: Optional[List[str]] = None) -> dict:
+def load_promo(user_dir: Optional[str] = None, dirs: Optional[List[str]] = None,
+               lang: Optional[str] = None) -> dict:
     """Internetsiz: avval oxirgi yuklab olingan nusxa, boʻlmasa dastur ichidagi promo.json."""
     cached = _read_json(os.path.join(user_dir or user_config_dir(), _PROMO_CACHE))
     if cached is not None:
-        return parse_promo(cached)
-    return parse_promo(_read_json(find_bundled("promo.json", dirs)))
+        return parse_promo(cached, lang)
+    return parse_promo(_read_json(find_bundled("promo.json", dirs)), lang)
 
 
 def _ssl_context():
@@ -320,7 +334,7 @@ def _user_agent() -> str:
 
 
 def fetch_promo(user_dir: Optional[str] = None, url: str = PROMO_URL,
-                timeout: float = 6.0) -> Optional[dict]:
+                timeout: float = 6.0, lang: Optional[str] = None) -> Optional[dict]:
     """GitHub'dan yangi promo.json ni yuklab, keshga yozadi.  Xato boʻlsa – None.
     Faqat oyna jarayoni chaqiradi: klaviatura kuzatuvchi jarayon internetga ulanmaydi."""
     import urllib.request
@@ -331,7 +345,7 @@ def fetch_promo(user_dir: Optional[str] = None, url: str = PROMO_URL,
         if not isinstance(data, dict):
             return None
         _write_json(os.path.join(user_dir or user_config_dir(), _PROMO_CACHE), data)
-        return parse_promo(data)
+        return parse_promo(data, lang)
     except Exception as exc:
         print(f"promo.json yuklanmadi: {exc!r}")
         return None

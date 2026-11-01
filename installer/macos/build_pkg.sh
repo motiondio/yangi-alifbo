@@ -24,8 +24,12 @@ pkgbuild --root "$WORK/root" --install-location / --component-plist "$WORK/compo
   --scripts "$WORK/scripts" --identifier uz.yangialifbo.app --version "$VERSION" \
   "$WORK/YangiAlifbo-component.pkg"
 
-for f in "$HERE"/resources/*.html; do
-  sed "s/@VERSION@/$VERSION/g" "$f" > "$WORK/resources/$(basename "$f")"
+# Sahifalar 3 tilda (uz/ru/en.lproj) – Installer tizim tiliga mosini oʻzi tanlaydi
+for dir in "$HERE"/resources/*.lproj; do
+  mkdir -p "$WORK/resources/$(basename "$dir")"
+  for f in "$dir"/*.html; do
+    sed "s/@VERSION@/$VERSION/g" "$f" > "$WORK/resources/$(basename "$dir")/$(basename "$f")"
+  done
 done
 sed -e "s/@VERSION@/$VERSION/g" -e "s/@ARCHS@/$ARCHS/g" "$HERE/distribution.xml" > "$WORK/distribution.xml"
 if [ -f installer_bg.png ]; then

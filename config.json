@@ -7,5 +7,6 @@
   "tray": true,
   "apps_mode": "list",
   "apps": null,
-  "check_updates": true
+  "check_updates": true,
+  "language": null
 }

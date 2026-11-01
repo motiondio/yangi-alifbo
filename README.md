@@ -36,7 +36,8 @@ Tayyor fayllar **[Releases](https://github.com/motiondio/yangi-alifbo/releases/l
 | `YangiAlifbo-macos-intel.dmg` / `.zip` | Mac — Intel, Applications ga sudrab oʻrnatish |
 | `YangiAlifbo.ahk` | Windows — AutoHotkey varianti (pastda) |
 
-**Windows:** `YangiAlifbo-Setup-windows-x64.exe` ni ishga tushiring. SmartScreen "Windows protected your PC" desa —
+**Windows:** `YangiAlifbo-Setup-windows-x64.exe` ni ishga tushiring — avval til soʻraladi (oʻzbekcha, ruscha,
+inglizcha), dastur ham shu tilda ochiladi. SmartScreen "Windows protected your PC" desa —
 *More info → Run anyway* (dastur imzolanmagan, chunki imzo sertifikati pullik).
 Antivirus (Windows Defender) faylni "virus" deb karantinga olsa — bu notoʻgʻri signal, qarang:
 [Antivirus "virus" desa](#antivirus-virus-desa).
@@ -145,24 +146,53 @@ tahrirlanadi. Roʻyxatdagi dasturda inglizcha yozayotganda (`shop`, `chat`) Ctrl
 * yuqorida — yoqish / oʻchirish (Ctrl+Alt+U bilan bir xil);
 * **Hozir oldinda** — oxirgi ishlatilgan dastur va unda ishlayaptimi; tugma bilan shu dastur
   roʻyxatga qoʻshiladi yoki olib tashlanadi ("nega bu yerda ishlamayapti?" savoliga javob);
-* bugun va jami nechta harf toʻgʻirlangani (faqat son, kompyuterda saqlanadi);
+* bugun va jami nechta harf toʻgʻirlangani va oxirgi 7 kun grafigi (faqat son, kompyuterda saqlanadi);
 * Instagram / YouTube / Telegram, **Barcha sozlamalar**, **Chiqish**. Boshqa joy bosilsa — yopiladi;
-* yangi versiya chiqqan boʻlsa — yashil **Yuklab olish** xabari.
+* yangi versiya chiqqan boʻlsa — yashil **Yuklab olish** xabari; 100, 1 000, 10 000 … harfga yetganda —
+  tabrik va **Ulashish** tugmasi (bir kun koʻrinadi).
 
 **Barcha sozlamalar** — yon panelli oyna:
 
-* **Umumiy** — *Sinab koʻring* maydoni (yozganingiz darhol yangi alifboda koʻrinadi), kompyuter bilan
-  ishga tushish, Backspace bilan qaytarish, `s'h`, tutuq belgisi, tezkor tugma.
+* **Umumiy** — **Til**, *Sinab koʻring* maydoni (yozganingiz darhol yangi alifboda koʻrinadi), kompyuter
+  bilan ishga tushish, Backspace bilan qaytarish, `s'h`, tutuq belgisi, tezkor tugma.
 * **Dasturlar** — "Faqat roʻyxatdagilarda" (standart) yoki "Hamma dasturlarda"; roʻyxat,
   *Dastur qoʻshish* (hozir ochiq dasturlar), *Standart roʻyxat*.
+* **Statistika** — pastda.
 * **Biz bilan** — eʼlonlar va havolalar (pastdagi `promo.json`), versiya va yangilanishni tekshirish.
 
 Yorugʻ / qorongʻi rejim tizimga qarab avtomatik tanlanadi. Oynalar alohida jarayonda ishlaydi
 (CustomTkinter) — internetga (faqat `promo.json` va yangi versiya uchun) klaviatura kuzatuvchi jarayon
 emas, shu jarayon ulanadi; tarmoq porti ochilmaydi. Asosiy dastur bilan foydalanuvchi papkasidagi fayllar orqali
 gaplashadi (macOS: `~/Library/Application Support/Yangi Alifbo/`, Windows: `%APPDATA%\Yangi Alifbo\`):
-`config.json` — sozlamalar, `state.json` — holat va hisoblagich, `control.json` — yoqish/oʻchirish va
-chiqish buyrugʻi, `update.json` — eng soʻnggi versiya. Oʻzgarishlar yarim soniya ichida kuchga kiradi.
+`config.json` — sozlamalar, `state.json` — holat, `stats.json` — statistika, `control.json` —
+yoqish/oʻchirish, chiqish va statistikani tozalash buyrugʻi, `update.json` — eng soʻnggi versiya.
+Oʻzgarishlar yarim soniya ichida kuchga kiradi.
+
+### Tillar
+
+Panel, tray menyusi, sozlamalar, macOS ruxsat oynalari va xabarlar 4 tilda: **Oʻzbekcha**,
+**Özbekça (yangi alifbo)**, **Русский**, **English**. Til *Sozlamalar → Umumiy → Til* da oʻzgaradi —
+qayta ishga tushirish shart emas.
+
+Til tanlanmagan boʻlsa: Windows'da — oʻrnatuvchida tanlangan til (`HKCU\Software\Yangi Alifbo\Language`),
+aks holda tizim tili (ruscha → ruscha, qolganlari → oʻzbekcha). Oʻrnatuvchilar ham 3 tilda: Windows
+(Inno Setup; oʻzbekcha tarjima — [`installer/Uzbek.isl`](installer/Uzbek.isl)), Mac `.pkg` sahifalari
+(`installer/macos/resources/{uz,ru,en}.lproj` — macOS tizim tiliga mosini oʻzi koʻrsatadi).
+
+Barcha matnlar [`alifbo_i18n.py`](alifbo_i18n.py) da. Yangi alifbodagi variant qoʻlda yozilmaydi —
+oʻzbekcha matndan dasturning oʻz oʻgirgichi bilan hosil qilinadi. Yangi matn qoʻshganda uchala tilni
+yozing — test (`test_alifbo_i18n`) birortasi yoki `{oʻrinbosar}` tushib qolsa xato beradi.
+
+### Statistika
+
+*Sozlamalar → Statistika*: bugun / oxirgi 7 kun / jami, oxirgi 30 kun grafigi (ustunga sichqoncha
+olib borilsa — sana va son), harflar (ş, ç, ö, ğ) va dasturlar boʻyicha, yutuqlar (ketma-ket kunlar,
+rekord kun, birinchi kun). **Natijamni ulashish** Instagram / Telegram uchun 1080×1080 rasm yaratib,
+Yuklanmalar papkasiga saqlaydi. **Statistikani tozalash** — hammasini oʻchiradi.
+
+Faqat sonlar saqlanadi (`stats.json`: kun → son, harflar, dastur nomlari) — yozilgan matn hech qachon
+saqlanmaydi va hech qayerga yuborilmaydi. 400 kundan eski kunlar bitta yigʻindiga qoʻshiladi. Oldingi
+versiyalardagi "jami" hisobi yangi statistikaga koʻchadi.
 
 ### Yangi versiya
 
@@ -206,6 +236,14 @@ keyingi ochilganda yangilanadi, yangi versiya chiqarish shart emas:
 ```
 
 Faqat `https://` havolalar koʻrsatiladi; `url` boʻsh boʻlsa — tugma yashiriladi. Eʼlonlar 3 tagacha.
+Boshqa tillar uchun yozuvga tarjima qoʻshish mumkin — boʻlmasa oʻzbekchasi koʻrsatiladi (yangi alifbo
+tilida — avtomatik oʻgirilib):
+
+```json
+{"title": "Yangi versiya", "text": "…", "url": "https://…",
+ "ru": {"title": "Новая версия", "text": "…"}, "en": {"title": "New version", "text": "…"}}
+```
+
 Internet boʻlmasa, oxirgi yuklab olingan nusxa (yoʻq boʻlsa — dastur ichidagi nusxa) koʻrsatiladi.
 
 ### Sozlamalar — `config.json`
@@ -220,7 +258,8 @@ Internet boʻlmasa, oxirgi yuklab olingan nusxa (yoʻq boʻlsa — dastur ichida
   "tray": true,
   "apps_mode": "list",
   "apps": null,
-  "check_updates": true
+  "check_updates": true,
+  "language": null
 }
 ```
 
@@ -236,6 +275,7 @@ papkasidagi `config.json` da saqlanadi va ustun turadi.
 * `apps` — `[{"id": "ru.keepcoder.Telegram", "name": "Telegram"}, …]`; `id` — macOS'da bundle id,
   Windows'da `.exe` nomi (`telegram.exe`). `null` — standart roʻyxat (`alifbo_config.py`).
 * `check_updates` — kuniga bir marta yangi versiyani tekshirish.
+* `language` — `"uz"`, `"uz-new"` (yangi alifbo), `"ru"`, `"en"`; `null` — avtomatik (yuqoridagi "Tillar").
 
 Buyruq qatori orqali ham: `--hotkey "<f9>"`, `--off`, `--no-undo`, `--keep-sh-apostrophe`, `--tutuq`, `--no-tray`.
 
@@ -430,7 +470,7 @@ eslab qolinadi: Windows'da tray bosilganda oldinga chiqadigan taskbar hisobga ol
 macOS'da ruxsat dastur ishlab turganda berilsa, ilova oʻzini bir marta qayta ochadi: macOS klaviatura
 kuzatuvini (Input Monitoring) koʻpincha faqat yangi ishga tushgan jarayonga beradi.
 
-Testlar: `python -m unittest -v test_alifbo_core test_alifbo_config`.
+Testlar: `python -m unittest -v test_alifbo_core test_alifbo_config test_alifbo_i18n`.
 
 ## Cheklovlar
 
