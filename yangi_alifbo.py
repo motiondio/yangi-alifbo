@@ -61,9 +61,10 @@ except Exception as exc:  # pragma: no cover  (ImportError yoki Linux'da DISPLAY
     sys.exit(1)
 
 from alifbo_apps import frontmost_app, frontmost_app_id
-from alifbo_config import (CONTROL_FILE, STATE_FILE, UI_REQUEST_FILE, allowed_ids, app_allowed,
-                           app_version, find_bundled, load_config, load_promo, read_runtime,
-                           runtime_path, user_config_path, write_runtime)
+from alifbo_config import (CONTROL_FILE, STATE_FILE, UI_REQUEST_FILE, UPDATE_FILE, allowed_ids,
+                           app_allowed, app_version, fetch_update, find_bundled, load_config,
+                           load_promo, parse_version, read_runtime, runtime_path, update_due,
+                           update_info, user_config_path, write_runtime)
 from alifbo_core import TUTUQ, Engine
 
 _MODIFIERS = {
@@ -508,6 +509,13 @@ class App:
             self.total = int(saved.get("total") or 0)
         except (TypeError, ValueError):
             self.today = self.total = 0
+        # Yangi versiya: update.json dan (internetga fon jarayoni chiqadi, bu jarayon emas)
+        self.version = app_version()
+        self.update = None                # {"version", "url", "page"} – oʻrnatilganidan yangisi
+        self._update_notified = saved.get("update_notified")  # Windows xabari har versiyaga bir marta
+        self._update_proc = None
+        self._update_spawned = None       # fon tekshiruvi oxirgi marta qachon ishga tushirilgan (monotonic)
+        self._started = time.monotonic()
         self.controller = keyboard.Controller()
         self.q: "queue.Queue[tuple]" = queue.Queue()
         self._injecting = threading.Event()
@@ -672,7 +680,8 @@ class App:
             self._roll_day()
             app = {"id": self.last_app[0], "name": self.last_app[1]} if self.last_app else None
             data = {"enabled": self.enabled, "app": app, "date": self._day, "today": self.today,
-                    "total": self.total, "pid": os.getpid(), "updated": time.time()}
+                    "total": self.total, "update_notified": self._update_notified,
+                    "pid": os.getpid(), "updated": time.time()}
             self._state_dirty = False
         try:
             write_runtime(STATE_FILE, data)
@@ -682,14 +691,15 @@ class App:
     def _housekeeping(self):
         """Fon ishlari, 0.5 s da bir: oyna oʻzgartirgan config.json va control.json ni qoʻllash,
         oxirgi faol dasturni eslab qolish, panel uchun state.json ni yozish (kamida 5 s da bir –
-        oyna shundan asosiy dastur ishlayotganini biladi)."""
+        oyna shundan asosiy dastur ishlayotganini biladi), yangi versiyani kuzatish."""
         def mtime(path):
             try:
                 return os.stat(path).st_mtime_ns
             except OSError:
                 return None
-        cfg_path, ctl_path = user_config_path(), runtime_path(CONTROL_FILE)
+        cfg_path, ctl_path, upd_path = user_config_path(), runtime_path(CONTROL_FILE), runtime_path(UPDATE_FILE)
         last_cfg, last_ctl = mtime(cfg_path), mtime(ctl_path)
+        last_upd = -1  # birinchi aylanishda avvalgi tekshiruv natijasini ham oʻqiymiz
         last_write = 0.0
         while not self._stop.wait(0.5):
             try:
@@ -702,6 +712,11 @@ class App:
                 if now != last_ctl:
                     last_ctl = now
                     self._apply_control(read_runtime(CONTROL_FILE))
+                now = mtime(upd_path)
+                if now != last_upd:
+                    last_upd = now
+                    self._on_update_file()
+                self._maybe_check_updates()
                 app = frontmost_app()
                 # oʻzimizning oynalar (panel) "oxirgi dastur" boʻlmasin
                 if app is not None and app[2] not in _own_pids() and app[:2] != self.last_app:
@@ -712,6 +727,60 @@ class App:
                     last_write = time.monotonic()
             except Exception as exc:  # fon oqimi hech qachon oʻlmasin
                 print(f"Fon ishlarida xatolik: {exc!r}")
+
+    # ---- yangi versiya -----------------------------------------------------------
+    def _on_update_file(self) -> None:
+        """update.json oʻzgardi (fon tekshiruvi yoki oyna yozdi): tray menyusi, belgi, xabar."""
+        info = update_info(self.version)
+        if info == self.update:
+            return
+        self.update = info
+        self._update_tray()
+        self._refresh_tray_menu()
+        if info and info["version"] != self._update_notified:
+            self._update_notified = info["version"]
+            self._state_dirty = True
+            print(f"[{APP_NAME}] yangi versiya: {info['version']}")
+            try:
+                # macOS da pystray xabari "Script Editor" nomidan chiqadi – u yerda belgi nuqtasi yetarli
+                if IS_WIN and self.tray is not None:
+                    self.tray.notify(f"{APP_NAME} {info['version']} chiqdi. Yangilash uchun belgini bosing.",
+                                     APP_NAME)
+            except Exception:
+                pass
+
+    def _maybe_check_updates(self) -> None:
+        """Kuniga bir marta: alohida fon jarayoni GitHub'dan versiya raqamini soʻraydi."""
+        if self._update_proc is not None and self._update_proc.poll() is not None:
+            self._update_proc = None
+        now = time.monotonic()
+        if (not self.cfg.get("check_updates", True) or self._update_proc is not None
+                or now - self._started < 60  # kompyuter yoqilganda internet hali boʻlmasligi mumkin
+                or (self._update_spawned is not None and now - self._update_spawned < 3 * 3600)
+                or parse_version(self.version) is None or not update_due()):
+            return
+        self._update_spawned = now
+        try:
+            self._update_proc = subprocess.Popen(_self_cmd() + ["--update-check"], close_fds=True)
+        except Exception as exc:
+            print(f"Yangi versiya tekshiruvi ishga tushmadi: {exc!r}")
+
+    def open_update(self, *_):
+        if self.update:
+            import webbrowser
+            webbrowser.open(self.update["url"])
+
+    def _refresh_tray_menu(self) -> None:
+        if self.tray is None:
+            return
+        try:
+            if IS_MAC:
+                from PyObjCTools import AppHelper
+                AppHelper.callAfter(self.tray.update_menu)  # AppKit – faqat asosiy oqimda
+            else:
+                self.tray.update_menu()
+        except Exception as exc:
+            print(f"Tray menyusi yangilanmadi: {exc!r}")
 
     # ---- boshqaruv -------------------------------------------------------------
     def toggle(self, *_):
@@ -726,8 +795,9 @@ class App:
         if self.tray is None:
             return
         try:
-            self.tray.icon = make_icon_image(self.enabled)
-            self.tray.title = f"{APP_NAME}: {'yoqilgan' if self.enabled else 'oʻchirilgan'}"
+            self.tray.icon = make_icon_image(self.enabled, badge=self.update is not None)
+            self.tray.title = (f"{APP_NAME}: {'yoqilgan' if self.enabled else 'oʻchirilgan'}"
+                               + (f" · {self.update['version']} chiqdi" if self.update else ""))
         except Exception:
             pass
 
@@ -779,8 +849,8 @@ class App:
 
 
 # ------------------------------------------------------------------- tray
-def make_icon_image(enabled: bool):
-    """ö harfiga oʻxshash oddiy belgi (shrift talab qilmaydi)."""
+def make_icon_image(enabled: bool, badge: bool = False):
+    """ö harfiga oʻxshash oddiy belgi (shrift talab qilmaydi); badge – yangi versiya nuqtasi."""
     from PIL import Image, ImageDraw
 
     size = 64
@@ -790,6 +860,9 @@ def make_icon_image(enabled: bool):
     d.ellipse((10, 24, 54, 62), outline=color, width=9)       # "o"
     d.ellipse((14, 4, 26, 16), fill=color)                     # chap nuqta
     d.ellipse((38, 4, 50, 16), fill=color)                     # oʻng nuqta
+    if badge:
+        d.ellipse((38, 38, 66, 66), fill=(0, 0, 0, 0))         # atrofida boʻsh joy
+        d.ellipse((43, 43, 61, 61), fill=(229, 83, 75, 255))   # qizil nuqta
     return img
 
 
@@ -801,6 +874,16 @@ def _own_pids() -> set:
     if _ui_proc is not None:
         pids.add(_ui_proc.pid)
     return pids
+
+
+def _self_cmd() -> list:
+    """Shu dasturni yana bir jarayon sifatida ishga tushirish buyrugʻi (oyna, fon tekshiruvi)."""
+    if IS_FROZEN:
+        return [sys.executable]
+    python = sys.executable
+    if IS_WIN:
+        python = python.replace("python.exe", "pythonw.exe")  # konsol oynasiz
+    return [python, os.path.abspath(__file__)]
 
 
 def open_ui(mode: str = "settings") -> None:
@@ -819,15 +902,8 @@ def open_ui(mode: str = "settings") -> None:
             return
         except OSError:
             pass
-    if IS_FROZEN:
-        cmd = [sys.executable]
-    else:
-        python = sys.executable
-        if IS_WIN:
-            python = python.replace("python.exe", "pythonw.exe")  # konsol oynasiz
-        cmd = [python, os.path.abspath(__file__)]
     try:
-        _ui_proc = subprocess.Popen(cmd + ["--ui", mode], close_fds=True)
+        _ui_proc = subprocess.Popen(_self_cmd() + ["--ui", mode], close_fds=True)
     except Exception as exc:
         print(f"Oynani ochib boʻlmadi: {exc!r}")
 
@@ -888,6 +964,9 @@ def make_tray(app: App):
     links = [pystray.MenuItem(link["title"], _url_opener(link["url"]))
              for link in load_promo()["links"]]
     items = [
+        pystray.MenuItem(lambda item: f"Yangi versiya {app.update['version']} – yuklab olish"
+                         if app.update else "Yangi versiya", app.open_update,
+                         visible=lambda item: app.update is not None),
         # Standart band: Windows'da chap bosish, macOS'da belgini bosish – panel
         pystray.MenuItem("Panelni ochish", lambda: open_ui("panel"), default=True),
         pystray.MenuItem(label, app.toggle),
@@ -1000,6 +1079,8 @@ def parse_args(argv=None):
     p.add_argument("--settings", action="store_true", help="sozlamalar oynasini ochish")
     p.add_argument("--ui", choices=("panel", "settings"),
                    help="panel yoki sozlamalar oynasi (asosiy dastur oʻzi ochadi)")
+    p.add_argument("--update-check", action="store_true",
+                   help="yangi versiyani tekshirib, natijani update.json ga yozish (asosiy dastur kuniga bir marta ishga tushiradi)")
     return p.parse_args(argv)
 
 
@@ -1007,6 +1088,8 @@ def main(argv=None) -> int:
     args = parse_args(argv)
     if args.check:
         return run_check()
+    if args.update_check:
+        return 0 if fetch_update() else 1
     if args.autostart:
         ok = set_autostart(args.autostart == "on")
         print("Avtomatik ishga tushirish:", ("yoqildi" if args.autostart == "on" else "oʻchirildi") if ok else "sozlanmadi")

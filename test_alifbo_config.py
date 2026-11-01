@@ -141,5 +141,110 @@ class PromoTests(unittest.TestCase):
         self.assertIsInstance(ac.parse_promo(data), dict)
 
 
+
+class UpdateTests(unittest.TestCase):
+    REL = "https://github.com/motiondio/yangi-alifbo/releases"
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.user = self._tmp.name
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _api(self, tag="yangi-alifbo-v1.0.7", **extra):
+        names = ["YangiAlifbo-macos-apple-silicon.pkg", "YangiAlifbo-macos-intel.pkg",
+                 "YangiAlifbo-Setup-windows-x64.exe", "YangiAlifbo-windows-x64.exe"]
+        data = {"tag_name": tag, "html_url": f"{self.REL}/tag/{tag}", "draft": False, "prerelease": False,
+                "assets": [{"name": n, "browser_download_url": f"{self.REL}/download/{tag}/{n}"} for n in names]
+                + [{"name": "YangiAlifbo-windows-x64-portable.zip",
+                    "browser_download_url": "https://evil.example/x.zip"}]}
+        data.update(extra)
+        return data
+
+    def test_parse_version(self):
+        self.assertEqual(ac.parse_version("yangi-alifbo-v1.0.6"), (1, 0, 6))
+        self.assertEqual(ac.parse_version("1.10.0"), (1, 10, 0))
+        self.assertEqual(ac.parse_version("v2.1"), (2, 1, 0))
+        self.assertGreater(ac.parse_version("1.0.10"), ac.parse_version("1.0.9"))
+        for bad in ("dev", "", None, 106):
+            self.assertIsNone(ac.parse_version(bad))
+
+    def test_release_asset(self):
+        self.assertEqual(ac.release_asset("darwin", "arm64"), "YangiAlifbo-macos-apple-silicon.pkg")
+        self.assertEqual(ac.release_asset("darwin", "x86_64"), "YangiAlifbo-macos-intel.pkg")
+        self.assertEqual(ac.release_asset("win32", kind="setup"), "YangiAlifbo-Setup-windows-x64.exe")
+        self.assertEqual(ac.release_asset("win32", kind="exe"), "YangiAlifbo-windows-x64.exe")
+        self.assertEqual(ac.release_asset("win32", kind="portable"), "YangiAlifbo-windows-x64-portable.zip")
+        self.assertIsNone(ac.release_asset("linux"))
+
+    def test_parse_release(self):
+        rel = ac.parse_release(self._api())
+        self.assertEqual(rel["version"], "1.0.7")
+        self.assertEqual(rel["page"], f"{self.REL}/tag/yangi-alifbo-v1.0.7")
+        self.assertIn("YangiAlifbo-windows-x64.exe", rel["assets"])
+        self.assertNotIn("YangiAlifbo-windows-x64-portable.zip", rel["assets"])  # begona sayt
+        self.assertIsNone(ac.parse_release(self._api(draft=True)))
+        self.assertIsNone(ac.parse_release(self._api(prerelease=True)))
+        self.assertIsNone(ac.parse_release(self._api(tag="nightly")))
+        self.assertIsNone(ac.parse_release("garbage"))
+
+    def test_release_from_location(self):
+        rel = ac.release_from_location(f"{self.REL}/tag/yangi-alifbo-v1.0.7")
+        self.assertEqual(rel["version"], "1.0.7")
+        self.assertEqual(rel["assets"]["YangiAlifbo-macos-intel.pkg"],
+                         f"{self.REL}/download/yangi-alifbo-v1.0.7/YangiAlifbo-macos-intel.pkg")
+        self.assertIsNone(ac.release_from_location("https://evil.example/releases/tag/v9.9.9"))
+        self.assertIsNone(ac.release_from_location(None))
+
+    def test_update_info(self):
+        self.assertIsNone(ac.update_info("1.0.6", self.user))  # hali tekshirilmagan
+        ac.write_runtime(ac.UPDATE_FILE, ac.parse_release(self._api()), self.user)
+        info = ac.update_info("1.0.6", self.user, platform="darwin", machine="arm64")
+        self.assertEqual(info["version"], "1.0.7")
+        self.assertTrue(info["url"].endswith("/yangi-alifbo-v1.0.7/YangiAlifbo-macos-apple-silicon.pkg"))
+        info = ac.update_info("1.0.6", self.user, platform="win32", kind="exe")
+        self.assertTrue(info["url"].endswith("/YangiAlifbo-windows-x64.exe"))
+        # mos fayl yoʻq (begona havola tashlab yuborilgan) – Release sahifasi
+        info = ac.update_info("1.0.6", self.user, platform="win32", kind="portable")
+        self.assertEqual(info["url"], info["page"])
+        self.assertIsNone(ac.update_info("1.0.7", self.user))
+        self.assertIsNone(ac.update_info("1.1.0", self.user))
+        self.assertIsNone(ac.update_info("dev", self.user))
+
+    def test_update_due(self):
+        self.assertTrue(ac.update_due(self.user))
+        ac.write_runtime(ac.UPDATE_FILE, {"checked": 1000.0}, self.user)
+        self.assertFalse(ac.update_due(self.user, now=1000.0 + 3600))
+        self.assertTrue(ac.update_due(self.user, now=1000.0 + ac.UPDATE_EVERY_S + 1))
+        self.assertTrue(ac.update_due(self.user, now=500.0))  # soat orqaga surilgan
+
+    def test_fetch_falls_back_to_redirect(self):
+        calls = []
+        api, redirect = ac._release_from_api, ac._release_from_redirect
+
+        def failing_api(timeout):
+            calls.append("api")
+            raise OSError("HTTP 403 rate limit")
+
+        def fake_redirect(timeout):
+            calls.append("redirect")
+            return ac.release_from_location(f"{self.REL}/tag/yangi-alifbo-v1.0.7")
+        ac._release_from_api, ac._release_from_redirect = failing_api, fake_redirect
+        try:
+            rel = ac.fetch_update(self.user)
+        finally:
+            ac._release_from_api, ac._release_from_redirect = api, redirect
+        self.assertEqual(calls, ["api", "redirect"])
+        self.assertEqual(rel["version"], "1.0.7")
+        self.assertFalse(ac.update_due(self.user))
+        self.assertEqual(ac.update_info("1.0.6", self.user)["version"], "1.0.7")
+
+    def test_check_updates_setting(self):
+        self.assertTrue(ac.DEFAULT_CONFIG["check_updates"])
+        ac.save_user_settings({"check_updates": False}, self.user)
+        self.assertFalse(ac.load_config(self.user, [])["check_updates"])
+
+
 if __name__ == "__main__":
     unittest.main()

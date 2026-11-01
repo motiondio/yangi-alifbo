@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Sozlamalar (config.json), dasturlar roʻyxati va havolalar/reklama (promo.json).
+Sozlamalar (config.json), dasturlar roʻyxati, havolalar/reklama (promo.json) va yangi versiya.
 
-Tizimga va GUI ga bogʻliq emas: asosiy dastur (yangi_alifbo.py) ham, sozlamalar oynasi
-(alifbo_settings.py) ham shu moduldan foydalanadi, testlar ham shuni tekshiradi.
+Tizimga va GUI ga bogʻliq emas: asosiy dastur (yangi_alifbo.py) ham, panel va sozlamalar oynasi
+(alifbo_ui.py) ham shu moduldan foydalanadi, testlar ham shuni tekshiradi.
 
 Sozlamalar uch qatlamdan yigʻiladi (keyingisi oldingisini bosadi):
     DEFAULT_CONFIG  →  dastur yonidagi config.json  →  foydalanuvchi papkasidagi config.json
@@ -13,8 +13,11 @@ from __future__ import annotations
 
 import json
 import os
+import platform as _platform
+import re
 import sys
 import tempfile
+import time
 from typing import Dict, List, Optional, Set
 
 APP_NAME = "Yangi Alifbo"
@@ -36,11 +39,13 @@ DEFAULT_CONFIG = {
     "apps_mode": "list",
     # Dasturlar roʻyxati: [{"id": ..., "name": ...}].  null – standart roʻyxat (pastda)
     "apps": None,
+    # Kuniga bir marta GitHub'dan eng soʻnggi versiya raqamini soʻrash
+    "check_updates": True,
 }
 
 # Sozlamalar oynasi oʻzgartira oladigan kalitlar
 EDITABLE_KEYS = ("enabled_on_start", "backspace_undo", "strip_sh_apostrophe",
-                 "tutuq_belgisi", "apps_mode", "apps")
+                 "tutuq_belgisi", "apps_mode", "apps", "check_updates")
 
 # ---------------------------------------------------------------- dasturlar
 # Identifikator: macOS – bundle id, Windows – .exe nomi (kichik harflarda).
@@ -222,9 +227,11 @@ def save_user_settings(changes: dict, user_dir: Optional[str] = None) -> None:
 #   state.json    asosiy dastur → oyna: yoqilganmi, oxirgi faol dastur, hisoblagich
 #   control.json  oyna → asosiy dastur: yoqish/oʻchirish, chiqish
 #   ui.json       ikkinchi nusxa → ishlab turgan oyna jarayoni: "panelni / sozlamalarni koʻrsat"
+#   update.json   oyna yoki fon tekshiruvi → hammaga: GitHub'dagi eng soʻnggi versiya
 STATE_FILE = "state.json"
 CONTROL_FILE = "control.json"
 UI_REQUEST_FILE = "ui.json"
+UPDATE_FILE = "update.json"
 
 
 def runtime_path(name: str, user_dir: Optional[str] = None) -> str:
@@ -299,20 +306,27 @@ def load_promo(user_dir: Optional[str] = None, dirs: Optional[List[str]] = None)
     return parse_promo(_read_json(find_bundled("promo.json", dirs)))
 
 
+def _ssl_context():
+    import ssl
+    try:
+        import certifi  # yigʻilgan macOS ilovasida tizim sertifikatlari topilmaydi
+        return ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        return ssl.create_default_context()
+
+
+def _user_agent() -> str:
+    return f"{APP_NAME}/{app_version()}"
+
+
 def fetch_promo(user_dir: Optional[str] = None, url: str = PROMO_URL,
                 timeout: float = 6.0) -> Optional[dict]:
     """GitHub'dan yangi promo.json ni yuklab, keshga yozadi.  Xato boʻlsa – None.
-    Faqat sozlamalar oynasi chaqiradi: klaviatura kuzatuvchi jarayon internetga ulanmaydi."""
-    import ssl
+    Faqat oyna jarayoni chaqiradi: klaviatura kuzatuvchi jarayon internetga ulanmaydi."""
     import urllib.request
     try:
-        try:
-            import certifi  # yigʻilgan macOS ilovasida tizim sertifikatlari topilmaydi
-            ctx = ssl.create_default_context(cafile=certifi.where())
-        except ImportError:
-            ctx = ssl.create_default_context()
-        req = urllib.request.Request(url, headers={"User-Agent": f"{APP_NAME}/{app_version()}"})
-        with urllib.request.urlopen(req, timeout=timeout, context=ctx) as resp:
+        req = urllib.request.Request(url, headers={"User-Agent": _user_agent()})
+        with urllib.request.urlopen(req, timeout=timeout, context=_ssl_context()) as resp:
             data = json.loads(resp.read(256 * 1024).decode("utf-8"))
         if not isinstance(data, dict):
             return None
@@ -321,3 +335,151 @@ def fetch_promo(user_dir: Optional[str] = None, url: str = PROMO_URL,
     except Exception as exc:
         print(f"promo.json yuklanmadi: {exc!r}")
         return None
+
+
+# ------------------------------------------------------------- yangi versiya
+# Faqat versiya raqami soʻraladi, hech qanday maʼlumot yuborilmaydi.  Klaviatura kuzatuvchi
+# jarayon internetga ulanmaydi: tekshiruvni oyna jarayoni yoki alohida fon jarayoni
+# (yangi_alifbo --update-check) qiladi va natijani update.json ga yozadi.
+REPO_URL = "https://github.com/motiondio/yangi-alifbo"
+RELEASES_URL = REPO_URL + "/releases"
+RELEASES_API = "https://api.github.com/repos/motiondio/yangi-alifbo/releases/latest"
+UPDATE_EVERY_S = 20 * 3600   # "kuniga bir marta" – har kuni bir xil soatda ochilsa ham
+MAC_ASSETS = {"arm64": "YangiAlifbo-macos-apple-silicon.pkg", "x86_64": "YangiAlifbo-macos-intel.pkg"}
+WIN_ASSETS = {"setup": "YangiAlifbo-Setup-windows-x64.exe", "exe": "YangiAlifbo-windows-x64.exe",
+              "portable": "YangiAlifbo-windows-x64-portable.zip"}
+
+
+def parse_version(value) -> Optional[tuple]:
+    """"yangi-alifbo-v1.0.6", "1.0.6", "v1.2" → (1, 0, 6) / (1, 2, 0);  "dev" → None."""
+    m = re.search(r"(\d+)\.(\d+)(?:\.(\d+))?", value) if isinstance(value, str) else None
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3) or 0)) if m else None
+
+
+def _gh_url(url) -> bool:
+    # Yuklab olish havolasi faqat oʻz repomizga olib borsin
+    return _url_ok(url) and url.startswith(REPO_URL + "/")
+
+
+def install_kind() -> str:
+    """Dastur qanday oʻrnatilgan – yangi versiyaning aynan shu turi taklif qilinadi.
+    Windows: "setup" (oʻrnatuvchi), "exe" (bitta fayl), "portable" (papka);  macOS: "pkg"."""
+    if sys.platform == "darwin":
+        return "pkg"
+    if not sys.platform.startswith("win") or not getattr(sys, "frozen", False):
+        return "setup"
+    exe_dir = os.path.dirname(os.path.abspath(sys.executable))
+    meipass = os.path.abspath(getattr(sys, "_MEIPASS", exe_dir))
+    try:
+        onefile = os.path.commonpath([meipass, exe_dir]) != exe_dir  # %TEMP%\_MEIxxxx
+    except ValueError:  # boshqa disk
+        onefile = True
+    if onefile:
+        return "exe"
+    return "setup" if os.path.isfile(os.path.join(exe_dir, "unins000.exe")) else "portable"
+
+
+def release_asset(platform: str = sys.platform, machine: Optional[str] = None,
+                  kind: Optional[str] = None) -> Optional[str]:
+    """Shu kompyuterga mos fayl nomi (GitHub Release'dagi)."""
+    if platform == "darwin":
+        machine = (machine or _platform.machine()).lower()
+        return MAC_ASSETS["arm64" if machine in ("arm64", "aarch64") else "x86_64"]
+    if platform.startswith("win"):
+        return WIN_ASSETS.get(kind if kind is not None else install_kind(), WIN_ASSETS["setup"])
+    return None
+
+
+def parse_release(data) -> Optional[dict]:
+    """GitHub API javobi (releases/latest) → {"version", "tag", "page", "assets": {nom: havola}}."""
+    if not isinstance(data, dict) or data.get("draft") or data.get("prerelease"):
+        return None
+    tag = data.get("tag_name")
+    version = parse_version(tag)
+    if version is None:
+        return None
+    page = data.get("html_url")
+    assets = {}
+    for item in _items(data.get("assets")):
+        if isinstance(item, dict) and isinstance(item.get("name"), str) \
+                and _gh_url(item.get("browser_download_url")):
+            assets[item["name"]] = item["browser_download_url"]
+    return {"version": "%d.%d.%d" % version, "tag": tag,
+            "page": page if _gh_url(page) else f"{RELEASES_URL}/tag/{tag}", "assets": assets}
+
+
+def release_from_location(location) -> Optional[dict]:
+    """Zaxira yoʻl: github.com/…/releases/latest yoʻnaltiradigan manzildan (…/releases/tag/<tag>).
+    API soatiga 60 soʻrov bilan cheklangan – bitta IP dagi koʻp foydalanuvchida tugab qolishi mumkin."""
+    prefix = RELEASES_URL + "/tag/"
+    if not isinstance(location, str) or not location.startswith(prefix):
+        return None
+    tag = location[len(prefix):].split("?")[0].strip("/")
+    names = list(MAC_ASSETS.values()) + list(WIN_ASSETS.values())
+    return parse_release({"tag_name": tag, "html_url": location, "assets": [
+        {"name": n, "browser_download_url": f"{RELEASES_URL}/download/{tag}/{n}"} for n in names]})
+
+
+def _release_from_api(timeout: float) -> Optional[dict]:
+    import urllib.request
+    req = urllib.request.Request(RELEASES_API, headers={
+        "User-Agent": _user_agent(), "Accept": "application/vnd.github+json"})
+    with urllib.request.urlopen(req, timeout=timeout, context=_ssl_context()) as resp:
+        return parse_release(json.loads(resp.read(1024 * 1024).decode("utf-8")))
+
+
+def _release_from_redirect(timeout: float) -> Optional[dict]:
+    import urllib.error
+    import urllib.request
+
+    class _NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, *args, **kwargs):
+            return None  # Location sarlavhasining oʻzi kerak
+
+    opener = urllib.request.build_opener(_NoRedirect, urllib.request.HTTPSHandler(context=_ssl_context()))
+    req = urllib.request.Request(RELEASES_URL + "/latest", method="HEAD",
+                                 headers={"User-Agent": _user_agent()})
+    try:
+        with opener.open(req, timeout=timeout):
+            return None
+    except urllib.error.HTTPError as exc:
+        return release_from_location(exc.headers.get("Location")) if exc.code in (301, 302, 303, 307) else None
+
+
+def fetch_update(user_dir: Optional[str] = None, timeout: float = 8.0) -> Optional[dict]:
+    """Eng soʻnggi versiyani aniqlab, update.json ga yozadi.  Internet boʻlmasa – None."""
+    release = None
+    for source in (_release_from_api, _release_from_redirect):
+        try:
+            release = source(timeout)
+        except Exception as exc:
+            print(f"Yangi versiya tekshirilmadi ({source.__name__}): {exc!r}")
+        if release is not None:
+            break
+    if release is None:
+        return None
+    release["checked"] = time.time()
+    write_runtime(UPDATE_FILE, release, user_dir)
+    return release
+
+
+def update_due(user_dir: Optional[str] = None, now: Optional[float] = None) -> bool:
+    checked = read_runtime(UPDATE_FILE, user_dir).get("checked")
+    now = time.time() if now is None else now
+    return not isinstance(checked, (int, float)) or not 0 <= now - checked < UPDATE_EVERY_S
+
+
+def update_info(current: Optional[str] = None, user_dir: Optional[str] = None,
+                platform: str = sys.platform, machine: Optional[str] = None,
+                kind: Optional[str] = None) -> Optional[dict]:
+    """Oʻrnatilganidan yangi versiya bormi (update.json boʻyicha, internetsiz).
+    Bor boʻlsa – {"version", "url" (shu kompyuterga mos fayl), "page" (Release sahifasi)}."""
+    cur = parse_version(app_version() if current is None else current)
+    data = read_runtime(UPDATE_FILE, user_dir)
+    latest = parse_version(data.get("version"))
+    if cur is None or latest is None or latest <= cur:
+        return None
+    page = data["page"] if _gh_url(data.get("page")) else RELEASES_URL + "/latest"
+    assets = data.get("assets") if isinstance(data.get("assets"), dict) else {}
+    url = assets.get(release_asset(platform, machine, kind) or "")
+    return {"version": "%d.%d.%d" % latest, "url": url if _gh_url(url) else page, "page": page}

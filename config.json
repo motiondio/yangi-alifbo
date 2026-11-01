@@ -6,5 +6,6 @@
   "tutuq_belgisi": null,
   "tray": true,
   "apps_mode": "list",
-  "apps": null
+  "apps": null,
+  "check_updates": true
 }

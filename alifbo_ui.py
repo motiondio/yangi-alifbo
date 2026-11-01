@@ -31,7 +31,6 @@ from alifbo_core import TUTUQ, convert_text
 
 IS_MAC = sys.platform == "darwin"
 IS_WIN = sys.platform.startswith("win")
-REPO_URL = "https://github.com/motiondio/yangi-alifbo"
 IDLE_EXIT_S = 10 * 60      # oynalar yopilgach jarayon shuncha kutadi
 MAIN_ALIVE_S = 15          # asosiy dastur state.json ni kamida 5 s da bir yozadi
 
@@ -47,6 +46,8 @@ SIDEBAR_BG = ("#ECECEF", "#29292C")
 NAV_ACTIVE = ("#DCDCE1", "#3A3A3F")
 CARD_BG = ("#FFFFFF", "#2A2A2D")
 CARD_BORDER = ("#E0E0E5", "#3A3A3F")
+UPDATE_BG = ("#E6F6EA", "#16301F")       # yangi versiya xabari
+UPDATE_BORDER = ("#B4E2C0", "#245A35")
 
 
 # ------------------------------------------------------------------ yordamchilar
@@ -181,6 +182,9 @@ class UI:
         self.state = ac.read_runtime(ac.STATE_FILE)
         self.promo = ac.load_promo()
         self.version = ac.app_version()
+        self.update_data = ac.read_runtime(ac.UPDATE_FILE)   # oxirgi tekshiruv natijasi
+        self.update = ac.update_info(self.version)          # oʻrnatilganidan yangisi boʻlsa
+        self.update_status = ""                             # "checking" / "done" / "failed"
 
         self.f_title = ctk.CTkFont(size=24, weight="bold")
         self.f_head = ctk.CTkFont(size=15, weight="bold")
@@ -208,8 +212,12 @@ class UI:
         self._idle_since = time.monotonic()
         self._req_mtime = self._mtime(ac.runtime_path(ac.UI_REQUEST_FILE))
         self._promo_q: "queue.Queue[dict]" = queue.Queue()
+        self._update_q: "queue.Queue[bool]" = queue.Queue()
+        self._upd_mtime = self._mtime(ac.runtime_path(ac.UPDATE_FILE))
         self._tick = 0
         threading.Thread(target=self._fetch_promo, name="promo", daemon=True).start()
+        if self.cfg.get("check_updates", True) and ac.parse_version(self.version) and ac.update_due():
+            self.check_update()
         self.root.after(250, self._poll)
 
     # ---- asosiy dastur bilan aloqa -------------------------------------------
@@ -280,6 +288,20 @@ class UI:
                 except tk.TclError:
                     pass
 
+    # ---- yangi versiya ------------------------------------------------------------
+    def check_update(self) -> None:
+        if self.update_status == "checking":
+            return
+        self.update_status = "checking"
+        # tarmoq – alohida oqimda; natija update.json ga yoziladi, _poll uni oʻqiydi
+        threading.Thread(target=lambda: self._update_q.put(ac.fetch_update() is not None),
+                         name="update", daemon=True).start()
+        self.refresh()
+
+    def open_update(self) -> None:
+        if self.update:
+            _open_url(self.update["url"])
+
     # ---- fon ------------------------------------------------------------------
     def _fetch_promo(self) -> None:
         promo = ac.fetch_promo()  # tarmoq – alohida oqimda, oyna qotmasin
@@ -304,6 +326,18 @@ class UI:
             pass
         except tk.TclError:
             pass
+        checked = False
+        try:
+            self.update_status = "done" if self._update_q.get_nowait() else "failed"
+            checked = True
+        except queue.Empty:
+            pass
+        mtime = self._mtime(ac.runtime_path(ac.UPDATE_FILE))
+        if mtime != self._upd_mtime or checked:  # fon tekshiruvi (asosiy dastur) ham yozishi mumkin
+            self._upd_mtime = mtime
+            self.update_data = ac.read_runtime(ac.UPDATE_FILE)
+            self.update = ac.update_info(self.version)
+            self.refresh()
         if self._tick % 4 == 0:
             self.state = ac.read_runtime(ac.STATE_FILE)
             self.refresh()
@@ -363,8 +397,21 @@ class Panel:
                                     progress_color=GREEN, command=self._on_master)
         self.master.pack(side="right")
 
-        card = ctk.CTkFrame(body, fg_color=CARD_BG, corner_radius=12, border_width=1,
-                            border_color=CARD_BORDER)
+        # Yangi versiya – faqat bor boʻlsa koʻrinadi (refresh)
+        self.update_box = ctk.CTkFrame(body, fg_color=UPDATE_BG, corner_radius=12, border_width=1,
+                                       border_color=UPDATE_BORDER)
+        top = ctk.CTkFrame(self.update_box, fg_color="transparent")
+        top.pack(fill="x", padx=14, pady=(10, 0))
+        self.update_title = ctk.CTkLabel(top, text="", font=ui.f_bold, anchor="w")
+        self.update_title.pack(side="left")
+        ctk.CTkButton(top, text="Yuklab olish", width=10, height=28, font=ui.f_bold, fg_color=GREEN,
+                      hover_color=GREEN_HOVER, text_color=ON_GREEN, command=self._on_update).pack(side="right")
+        ctk.CTkLabel(self.update_box, text="Yuklangan faylni ochib oʻrnating – sozlamalar saqlanadi.",
+                     font=ui.f_small, text_color=TEXT_MUTED, anchor="w", justify="left",
+                     wraplength=270).pack(anchor="w", padx=14, pady=(2, 10))
+
+        card = self.app_card = ctk.CTkFrame(body, fg_color=CARD_BG, corner_radius=12, border_width=1,
+                                            border_color=CARD_BORDER)
         card.pack(fill="x", padx=12)
         ctk.CTkLabel(card, text="Hozir oldinda", font=ui.f_small, text_color=TEXT_MUTED,
                      height=14).pack(anchor="w", padx=14, pady=(10, 0))
@@ -414,6 +461,7 @@ class Panel:
                               if alive else "Dastur ishlamayapti")
         self.today.configure(text=_fmt(ui.state.get("today")))
         self.total.configure(text=_fmt(ui.state.get("total")))
+        self._refresh_update()
 
         app = ui.state.get("app") if isinstance(ui.state.get("app"), dict) else None
         ids = ac.allowed_ids(ui.cfg)
@@ -434,6 +482,18 @@ class Panel:
         if alive and not enabled:
             hint = "Dastur oʻchirilgan – yuqoridagi tugma bilan yoqing."
         self.app_hint.configure(text=hint)
+
+    def _refresh_update(self) -> None:
+        upd = self.ui.update
+        if upd:
+            self.update_title.configure(text=f"Yangi versiya: {upd['version']}")
+        if bool(upd) != bool(self.update_box.winfo_manager()):
+            if upd:
+                self.update_box.pack(fill="x", padx=12, pady=(0, 10), before=self.app_card)
+            else:
+                self.update_box.pack_forget()
+            if self.visible:
+                self._place()  # balandlik oʻzgardi
 
     def refresh_promo(self) -> None:
         for child in self.links.winfo_children():
@@ -459,25 +519,34 @@ class Panel:
         self.ui.quit_main()
         self.close()
 
+    def _on_update(self) -> None:
+        self.ui.open_update()
+        self.close()
+
     # ---- koʻrsatish / yopish -------------------------------------------------------
     def show(self) -> None:
         self.refresh()
         win = self.win
-        win.update_idletasks()
-        w, h = win.winfo_reqwidth(), win.winfo_reqheight()
-        px, py = win.winfo_pointerxy()  # belgi bosilgan joy (kursor hali shu yerda)
-        left, top, right, bottom = _work_area(win)
-        x = min(max(px - w // 2, left + 8), right - w - 8)
-        # Menyu satri tepada (macOS) – pastga ochamiz; taskbar pastda (Windows) – yuqoriga
-        y = py + 14 if py < (top + bottom) / 2 else py - h - 14
-        y = min(max(y, top + 6), bottom - h - 6)
-        win.geometry(f"{w}x{h}+{int(x)}+{int(y)}")
+        self._anchor = win.winfo_pointerxy()  # belgi bosilgan joy (kursor hali shu yerda)
+        self._place()
         win.deiconify()
         if IS_WIN:
             _win11_round_corners(win)
         _activate(win)
         self.visible, self._had_focus, self._shown_at = True, False, time.monotonic()
         win.after(150, self._watch_focus)
+
+    def _place(self) -> None:
+        win = self.win
+        win.update_idletasks()
+        w, h = win.winfo_reqwidth(), win.winfo_reqheight()
+        px, py = self._anchor
+        left, top, right, bottom = _work_area(win)
+        x = min(max(px - w // 2, left + 8), right - w - 8)
+        # Menyu satri tepada (macOS) – pastga ochamiz; taskbar pastda (Windows) – yuqoriga
+        y = py + 14 if py < (top + bottom) / 2 else py - h - 14
+        y = min(max(y, top + 6), bottom - h - 6)
+        win.geometry(f"{w}x{h}+{int(x)}+{int(y)}")
 
     def _watch_focus(self) -> None:
         if not self.visible:
@@ -555,8 +624,10 @@ class SettingsWindow:
         names = ctk.CTkFrame(brand, fg_color="transparent")
         names.pack(side="left", padx=10)
         ctk.CTkLabel(names, text=ac.APP_NAME, font=ui.f_head, anchor="w").pack(anchor="w")
-        ctk.CTkLabel(names, text=f"versiya {ui.version}", font=ui.f_small, text_color=TEXT_MUTED,
-                     anchor="w", height=14).pack(anchor="w")
+        self.side_version = ctk.CTkLabel(names, text=f"versiya {ui.version}", font=ui.f_small,
+                                         text_color=TEXT_MUTED, anchor="w", height=14)
+        self.side_version.pack(anchor="w")
+        self.side_version.bind("<Button-1>", lambda e: self.ui.update and self.select("about"))
 
         self.nav = {}
         for i, (key, title) in enumerate(self.PAGES, start=1):
@@ -809,8 +880,73 @@ class SettingsWindow:
         page, self.about = self._page("Biz bilan", "Eʼlonlar, yangiliklar va ijtimoiy tarmoqlar.")
         self.about_body = ctk.CTkFrame(self.about, fg_color="transparent")
         self.about_body.pack(fill="x")
+        self._build_version_card(self.about)
         self.refresh_promo()
         return page
+
+    def _build_version_card(self, parent) -> None:
+        ui = self.ui
+        card = self._section(parent, "Dastur haqida")
+        row = ctk.CTkFrame(card, fg_color="transparent")
+        row.pack(fill="x", padx=16, pady=10)
+        left = ctk.CTkFrame(row, fg_color="transparent")
+        left.pack(side="left", fill="x", expand=True)
+        ctk.CTkLabel(left, text=f"{ac.APP_NAME} {ui.version}", font=ui.f_body, anchor="w").pack(anchor="w")
+        self.upd_text = ctk.CTkLabel(left, text="", font=ui.f_small, text_color=TEXT_MUTED, anchor="w",
+                                     justify="left", wraplength=400)
+        self.upd_text.pack(anchor="w")
+        self.upd_btn = ctk.CTkButton(row, text="", width=170, height=32, border_color=CARD_BORDER,
+                                     command=self._on_update_btn)
+        self.upd_btn.pack(side="right")
+        self._upd_view = None
+        row = self._row(card, "Yangi versiyani avtomatik tekshirish",
+                        "Kuniga bir marta GitHub'dan faqat versiya raqami soʻraladi, boshqa hech narsa yuborilmaydi.")
+        self._switch(row, bool(ui.cfg.get("check_updates", True)), lambda v: ui.save(check_updates=v))
+        row = self._row(card, "Yangi oʻzbek lotin alifbosi (OʻRQ-1184)", "Ochiq manba kodi va barcha versiyalar")
+        ctk.CTkButton(row, text="GitHub", width=80, fg_color="transparent", border_width=1,
+                      border_color=CARD_BORDER, text_color=TEXT, hover_color=NAV_ACTIVE,
+                      command=lambda: _open_url(ac.RELEASES_URL)).pack(side="right")
+
+    def _on_update_btn(self) -> None:
+        if self.ui.update:
+            self.ui.open_update()
+        else:
+            self.ui.check_update()
+
+    def _refresh_update(self) -> None:
+        ui = self.ui
+        upd, status, data = ui.update, ui.update_status, ui.update_data
+        if upd:
+            text = f"Yangi versiya chiqdi: {upd['version']}. Yuklab olib, ustidan oʻrnating – sozlamalar saqlanadi."
+            button = (f"{upd['version']} ni yuklab olish", True)
+        else:
+            if status == "checking":
+                text = "Tekshirilmoqda…"
+            elif status == "failed":
+                text = "Tekshirib boʻlmadi – internet aloqasini tekshiring."
+            elif ac.parse_version(ui.version) is None:
+                text = "Manba koddan ishga tushirilgan" + (f" · eng soʻnggi: {data['version']}"
+                                                          if data.get("version") else "")
+            elif isinstance(data.get("checked"), (int, float)):
+                text = "Eng soʻnggi versiya oʻrnatilgan · tekshirildi " + time.strftime(
+                    "%d.%m %H:%M", time.localtime(data["checked"]))
+            else:
+                text = "Hali tekshirilmagan"
+            button = ("Tekshirish", False)
+        view = (text, button, status == "checking", bool(upd))
+        if view == self._upd_view:
+            return  # har soniyada qayta chizmaymiz
+        self._upd_view = view
+        self.upd_text.configure(text=text, text_color=TEXT_OK if upd else TEXT_MUTED)
+        green = button[1]
+        self.upd_btn.configure(text=button[0], fg_color=GREEN if green else "transparent",
+                               hover_color=GREEN_HOVER if green else NAV_ACTIVE,
+                               text_color=ON_GREEN if green else TEXT, border_width=0 if green else 1,
+                               font=ui.f_bold if green else ui.f_body,
+                               state="disabled" if status == "checking" else "normal")
+        self.side_version.configure(
+            text=f"{ui.version}  →  {upd['version']} chiqdi" if upd else f"versiya {ui.version}",
+            text_color=TEXT_OK if upd else TEXT_MUTED)
 
     def refresh_promo(self) -> None:
         ui = self.ui
@@ -841,15 +977,6 @@ class SettingsWindow:
                                                                                 sticky="ew", padx=4)
         else:
             ctk.CTkLabel(row, text="Havolalar tez orada qoʻshiladi.", text_color=TEXT_MUTED).pack(anchor="w")
-        card = self._section(self.about_body, "Dastur haqida")
-        row = self._row(card, f"{ac.APP_NAME} {ui.version}", "Yangi oʻzbek lotin alifbosi (OʻRQ-1184)",
-                        first=True)
-        ctk.CTkButton(row, text="Yangi versiyalar", width=130, fg_color="transparent", border_width=1,
-                      border_color=CARD_BORDER, text_color=TEXT, hover_color=NAV_ACTIVE,
-                      command=lambda: _open_url(REPO_URL + "/releases/latest")).pack(side="right")
-        ctk.CTkButton(row, text="GitHub", width=80, fg_color="transparent", border_width=1,
-                      border_color=CARD_BORDER, text_color=TEXT, hover_color=NAV_ACTIVE,
-                      command=lambda: _open_url(REPO_URL)).pack(side="right", padx=6)
 
     # ---- holat -------------------------------------------------------------------------
     def refresh(self) -> None:
@@ -866,6 +993,7 @@ class SettingsWindow:
         self.mode.set("Hamma dasturlarda" if mode_all else "Faqat roʻyxatdagilarda")
         self.mode_hint.configure(text="Roʻyxat hisobga olinmaydi – hamma joyda almashtiriladi." if mode_all
                                  else "Roʻyxatdagi dasturlarda ishlaydi. Panel orqali ham qoʻshish mumkin.")
+        self._refresh_update()
 
 
 # ----------------------------------------------------------------------- kirish

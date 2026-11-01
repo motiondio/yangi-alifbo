@@ -76,13 +76,14 @@ sertifikat bilan imzolash mumkin — bir martalik sozlash `signing/README.md` da
 
 Belgi **menyu satrida** (yuqori oʻngda) chiqadi, Dock'da koʻrinmaydi. Bosilsa — panel, oʻng tugma
 (yoki Control+bosish) — menyu. Chiqish: panel yoki menyu → *Chiqish*.
-Dastur ikkinchi marta ochilsa, "allaqachon ishlamoqda" deb ogohlantiradi (ikki nusxa harfni ikki marta
-almashtirib qoʻyardi). Avtomatik ishga tushishi: *System Settings → General → Login Items* ga qoʻshing.
+Dastur ikkinchi marta ochilsa, yangi nusxa ishga tushmaydi — sozlamalar oynasi ochiladi (ikki nusxa
+harfni ikki marta almashtirib qoʻyardi). Avtomatik ishga tushishi: *System Settings → General → Login Items* ga qoʻshing.
 Yangi versiyaga oʻtganda macOS eski ruxsatni tanimasligi mumkin — roʻyxatda "Yangi Alifbo" ni oʻchirib (−)
 qayta qoʻshing.
 
 Yangi versiyani yigʻish: GitHub'da *Actions → Build Yangi Alifbo → Run workflow* →
-versiya raqamini kiriting. 5–10 daqiqadan soʻng Releases'da paydo boʻladi.
+versiya raqamini kiriting. 5–10 daqiqadan soʻng Releases'da paydo boʻladi va foydalanuvchilarga
+bir kun ichida xabar chiqadi (pastdagi "Yangi versiya" ga qarang).
 
 ---
 
@@ -145,7 +146,8 @@ tahrirlanadi. Roʻyxatdagi dasturda inglizcha yozayotganda (`shop`, `chat`) Ctrl
 * **Hozir oldinda** — oxirgi ishlatilgan dastur va unda ishlayaptimi; tugma bilan shu dastur
   roʻyxatga qoʻshiladi yoki olib tashlanadi ("nega bu yerda ishlamayapti?" savoliga javob);
 * bugun va jami nechta harf toʻgʻirlangani (faqat son, kompyuterda saqlanadi);
-* Instagram / YouTube / Telegram, **Barcha sozlamalar**, **Chiqish**. Boshqa joy bosilsa — yopiladi.
+* Instagram / YouTube / Telegram, **Barcha sozlamalar**, **Chiqish**. Boshqa joy bosilsa — yopiladi;
+* yangi versiya chiqqan boʻlsa — yashil **Yuklab olish** xabari.
 
 **Barcha sozlamalar** — yon panelli oyna:
 
@@ -153,14 +155,36 @@ tahrirlanadi. Roʻyxatdagi dasturda inglizcha yozayotganda (`shop`, `chat`) Ctrl
   ishga tushish, Backspace bilan qaytarish, `s'h`, tutuq belgisi, tezkor tugma.
 * **Dasturlar** — "Faqat roʻyxatdagilarda" (standart) yoki "Hamma dasturlarda"; roʻyxat,
   *Dastur qoʻshish* (hozir ochiq dasturlar), *Standart roʻyxat*.
-* **Biz bilan** — eʼlonlar va havolalar (pastdagi `promo.json`), versiya.
+* **Biz bilan** — eʼlonlar va havolalar (pastdagi `promo.json`), versiya va yangilanishni tekshirish.
 
 Yorugʻ / qorongʻi rejim tizimga qarab avtomatik tanlanadi. Oynalar alohida jarayonda ishlaydi
-(CustomTkinter) — internetga (faqat `promo.json` uchun) klaviatura kuzatuvchi jarayon emas, shu jarayon
-ulanadi; tarmoq porti ochilmaydi. Asosiy dastur bilan foydalanuvchi papkasidagi fayllar orqali
+(CustomTkinter) — internetga (faqat `promo.json` va yangi versiya uchun) klaviatura kuzatuvchi jarayon
+emas, shu jarayon ulanadi; tarmoq porti ochilmaydi. Asosiy dastur bilan foydalanuvchi papkasidagi fayllar orqali
 gaplashadi (macOS: `~/Library/Application Support/Yangi Alifbo/`, Windows: `%APPDATA%\Yangi Alifbo\`):
 `config.json` — sozlamalar, `state.json` — holat va hisoblagich, `control.json` — yoqish/oʻchirish va
-chiqish buyrugʻi. Oʻzgarishlar yarim soniya ichida kuchga kiradi.
+chiqish buyrugʻi, `update.json` — eng soʻnggi versiya. Oʻzgarishlar yarim soniya ichida kuchga kiradi.
+
+### Yangi versiya
+
+Kuniga bir marta (ilova ochilgandan bir daqiqa keyin) dastur GitHub'dan eng soʻnggi Release
+raqamini soʻraydi — boshqa hech qanday maʼlumot yuborilmaydi. Buni klaviatura kuzatuvchi jarayon
+emas, qisqa fon jarayoni (`--update-check`) yoki ochiq oyna qiladi. Avval GitHub API, u cheklovga
+tushsa (bitta IP dan soatiga 60 soʻrov) — `releases/latest` yoʻnaltirishi ishlatiladi.
+
+Yangi versiya boʻlsa:
+
+* belgida qizil nuqta, menyuda **Yangi versiya X – yuklab olish** bandi;
+* panelda yashil xabar, sozlamalarda (*Biz bilan → Dastur haqida*) — yuklab olish tugmasi;
+* Windows'da bir marta tizim xabari (har versiyaga bir marta).
+
+Tugma brauzerda aynan shu kompyuterga mos faylni yuklaydi: Mac — `.pkg` (M yoki Intel),
+Windows — dastur qanday oʻrnatilgan boʻlsa shunisi (oʻrnatuvchi / bitta `.exe` / portativ `.zip`).
+Ilovaning oʻzi faylni jimgina yuklab oʻrnatmaydi: imzosiz dastur internetdan `.exe` yuklab ishga
+tushirsa, antiviruslar uni shubhali deb belgilaydi. Oʻchirish: *Biz bilan → Yangi versiyani avtomatik
+tekshirish* yoki `"check_updates": false`.
+
+Bu xabar 1.0.7 dan boshlab ishlaydi — 1.0.6 va undan eskilarga yangi versiya haqida `promo.json`
+eʼloni orqali aytish mumkin.
 
 ### Havolalar va eʼlonlar — `promo.json`
 
@@ -195,7 +219,8 @@ Internet boʻlmasa, oxirgi yuklab olingan nusxa (yoʻq boʻlsa — dastur ichida
   "tutuq_belgisi": null,
   "tray": true,
   "apps_mode": "list",
-  "apps": null
+  "apps": null,
+  "check_updates": true
 }
 ```
 
@@ -210,6 +235,7 @@ papkasidagi `config.json` da saqlanadi va ustun turadi.
 * `apps_mode` — `"list"`: faqat `apps` roʻyxatidagi dasturlarda; `"all"`: hamma dasturlarda.
 * `apps` — `[{"id": "ru.keepcoder.Telegram", "name": "Telegram"}, …]`; `id` — macOS'da bundle id,
   Windows'da `.exe` nomi (`telegram.exe`). `null` — standart roʻyxat (`alifbo_config.py`).
+* `check_updates` — kuniga bir marta yangi versiyani tekshirish.
 
 Buyruq qatori orqali ham: `--hotkey "<f9>"`, `--off`, `--no-undo`, `--keep-sh-apostrophe`, `--tutuq`, `--no-tray`.
 
